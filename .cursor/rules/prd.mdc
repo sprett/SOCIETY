@@ -1,0 +1,279 @@
+---
+alwaysApply: true
+---
+
+# Product Requirements Document (PRD)
+
+## Project
+
+**Name:** Event Platform (Luma-style MVP)  
+**Platform:** iOS  
+**UI Framework:** SwiftUI  
+**Architecture:** MVVM + Repository Pattern  
+**Purpose:** Define scope, structure, and rules for building a minimal, extensible event app.
+
+---
+
+## 1. Product Overview
+
+### 1.1 Goal
+
+Build an iOS application that allows users to:
+
+- Create events
+- Share event pages
+- Collect RSVPs
+- Manage guest lists
+- Check in attendees
+
+The initial version must prioritize simplicity, speed of development, and extensibility.
+
+---
+
+### 1.2 Target Users
+
+- Event organizers (hosts)
+- Event attendees (guests)
+
+---
+
+### 1.3 Core Value Proposition
+
+A simple, elegant event platform that removes friction from creating and attending events.
+
+---
+
+## 2. Scope
+
+### 2.1 In Scope (MVP)
+
+- Authentication
+- Event creation
+- Event viewing
+- RSVP handling
+- Guest list management
+- Event sharing
+- Basic check-in
+
+### 2.2 Out of Scope (Future)
+
+- Advanced analytics
+- Calendar sync
+- Full payment flows
+- Advanced branding
+- Web application
+
+---
+
+## 3. Functional Requirements
+
+### 3.1 Authentication
+
+- Email/password authentication
+- Persist user session
+- Logout support
+
+---
+
+### 3.2 Events
+
+- Create, update, and delete events
+- Public event page via shareable link
+- Event visibility (public / private)
+
+---
+
+### 3.3 RSVP
+
+- RSVP statuses: Going / Not Going / Maybe
+- Update RSVP
+- View RSVP confirmation
+
+---
+
+### 3.4 Guest List
+
+- View guest list by RSVP status
+- Manual guest removal
+- Track check-in state
+
+---
+
+### 3.5 Check-In
+
+- Generate QR code per RSVP
+- Scan QR code to check in attendees
+- Manual check-in override
+
+---
+
+### 3.6 Notifications
+
+- RSVP confirmation notification
+- Event reminder notification
+
+---
+
+## 4. Non-Functional Requirements
+
+- SwiftUI only (UIKit only if absolutely required)
+- MVVM architecture
+- Testable ViewModels
+- Async/await concurrency
+- Offline-safe read operations
+- No business logic inside Views
+
+---
+
+## 5. Technical Architecture
+
+### 5.1 Architectural Flow
+
+- Views are passive and stateless
+- ViewModels manage state and actions
+- Repositories abstract data sources
+- Services handle networking and persistence
+
+---
+
+### 5.2 State Management
+
+- `@StateObject` for ViewModels
+- `@Published` for observable state
+- No global mutable state
+
+---
+
+## 6. Project File Structure
+
+### 6.1 Root Hierarchy
+
+EventApp/
+├── App/
+│ └── EventApp.swift
+│
+├── Core/
+│ ├── Networking/
+│ │ ├── APIClient.swift
+│ │ ├── Endpoint.swift
+│ │ └── NetworkError.swift
+│ │
+│ ├── Persistence/
+│ │ ├── LocalStore.swift
+│ │ └── CachePolicy.swift
+│ │
+│ ├── Auth/
+│ │ ├── AuthService.swift
+│ │ ├── AuthRepository.swift
+│ │ └── AuthSession.swift
+│ │
+│ ├── Utils/
+│ │ ├── DateFormatter+Extensions.swift
+│ │ ├── ImageLoader.swift
+│ │ └── Validators.swift
+│ │
+│ └── DesignSystem/
+│ ├── Colors.swift
+│ ├── Typography.swift
+│ └── Spacing.swift
+│
+├── Features/
+│ ├── Authentication/
+│ │ ├── LoginView.swift
+│ │ ├── SignupView.swift
+│ │ ├── AuthViewModel.swift
+│ │ └── AuthModels.swift
+│ │
+│ ├── Events/
+│ │ ├── EventList/
+│ │ │ ├── EventListView.swift
+│ │ │ └── EventListViewModel.swift
+│ │ │
+│ │ ├── EventDetail/
+│ │ │ ├── EventDetailView.swift
+│ │ │ └── EventDetailViewModel.swift
+│ │ │
+│ │ ├── EventCreate/
+│ │ │ ├── EventCreateView.swift
+│ │ │ └── EventCreateViewModel.swift
+│ │ │
+│ │ ├── GuestList/
+│ │ │ ├── GuestListView.swift
+│ │ │ └── GuestListViewModel.swift
+│ │ │
+│ │ ├── CheckIn/
+│ │ │ ├── CheckInView.swift
+│ │ │ └── CheckInViewModel.swift
+│ │ │
+│ │ ├── EventModels.swift
+│ │ └── EventRepository.swift
+│ │
+│ └── Profile/
+│ ├── ProfileView.swift
+│ └── ProfileViewModel.swift
+│
+├── Shared/
+│ ├── Components/
+│ │ ├── PrimaryButton.swift
+│ │ ├── AvatarView.swift
+│ │ ├── QRCodeView.swift
+│ │ └── EmptyStateView.swift
+│ │
+│ ├── Modifiers/
+│ │ ├── CardStyle.swift
+│ │ └── ShadowStyle.swift
+│ │
+│ └── Extensions/
+│ ├── View+Extensions.swift
+│ └── String+Extensions.swift
+│
+├── Resources/
+│ ├── Assets.xcassets
+│ └── Localizable.strings
+│
+└── Tests/
+├── ViewModelTests/
+└── RepositoryTests/
+
+---
+
+## 7. Coding Rules (Cursor-Enforced)
+
+- Views must NOT:
+  - Fetch data directly
+  - Contain business logic
+- ViewModels must:
+  - Be annotated with `@MainActor`
+  - Expose state via `@Published`
+- Repositories must:
+  - Be protocol-based
+  - Be dependency-injected
+  - Avoid singletons
+
+---
+
+## 8. Naming Conventions
+
+- Views: `FeatureNameView`
+- ViewModels: `FeatureNameViewModel`
+- Repositories: `FeatureRepository`
+- Services: `FeatureService`
+
+---
+
+## 9. Extensibility Rules
+
+- Each feature must:
+  - Live under `Features/`
+  - Have its own View and ViewModel
+  - Reuse Core services
+- Shared UI components belong in `Shared/Components`
+
+---
+
+## 10. MVP Success Criteria
+
+- Event creation < 60 seconds
+- RSVP flow < 10 seconds
+- Guest check-in works offline
+- No crashes during normal flows
