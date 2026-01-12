@@ -25,7 +25,7 @@ struct SOCIETYApp: App {
 
     var body: some Scene {
         WindowGroup {
-            EventListView()
+            MainTabView()
         }
         .modelContainer(sharedModelContainer)
     }

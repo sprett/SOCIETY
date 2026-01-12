@@ -9,27 +9,27 @@ import SwiftUI
 
 struct EventListView: View {
     @StateObject private var viewModel = EventListViewModel()
-    
+
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter
     }()
-    
+
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
                 // Header
                 HStack {
-                    Text("Events")
+                    Text("Discover Events")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                     Spacer()
                 }
                 .padding(.horizontal)
                 .padding(.top)
-                
+
                 // Event List
                 ScrollView {
                     LazyVStack(spacing: 16) {
@@ -38,21 +38,8 @@ struct EventListView: View {
                         }
                     }
                     .padding()
+                    .padding(.bottom, 100)  // Add bottom padding so content isn't hidden behind tab bar
                 }
-                
-                // Create Event Button
-                Button(action: {
-                    viewModel.createEvent()
-                }) {
-                    Text("Create event")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .cornerRadius(12)
-                }
-                .padding()
             }
             .navigationBarHidden(true)
         }
@@ -62,13 +49,13 @@ struct EventListView: View {
 struct EventCard: View {
     let event: Event
     let dateFormatter: DateFormatter
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(event.title)
                 .font(.headline)
                 .foregroundColor(.primary)
-            
+
             HStack {
                 Image(systemName: "calendar")
                     .foregroundColor(.secondary)
@@ -76,7 +63,7 @@ struct EventCard: View {
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
-            
+
             HStack {
                 Image(systemName: "location")
                     .foregroundColor(.secondary)
@@ -84,7 +71,7 @@ struct EventCard: View {
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
-            
+
             HStack {
                 Spacer()
                 Text(event.rsvpStatus.rawValue)
@@ -102,7 +89,7 @@ struct EventCard: View {
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
-    
+
     private var rsvpStatusColor: Color {
         switch event.rsvpStatus {
         case .going:
