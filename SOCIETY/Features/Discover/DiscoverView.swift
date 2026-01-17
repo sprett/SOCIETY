@@ -34,9 +34,43 @@ struct DiscoverView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: 36))
-                .foregroundStyle(AppColors.secondaryText)
+            AsyncImage(url: URL(string: "https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?q=80&w=2034&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D")) { phase in
+                switch phase {
+                case .empty:
+                    Circle()
+                        .fill(AppColors.surface)
+                        .frame(width: 44, height: 44)
+                        .overlay {
+                            Image(systemName: "person.crop.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(AppColors.secondaryText)
+                        }
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 44, height: 44)
+                        .clipShape(Circle())
+                case .failure:
+                    Circle()
+                        .fill(AppColors.surface)
+                        .frame(width: 44, height: 44)
+                        .overlay {
+                            Image(systemName: "person.crop.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(AppColors.secondaryText)
+                        }
+                @unknown default:
+                    Circle()
+                        .fill(AppColors.surface)
+                        .frame(width: 44, height: 44)
+                        .overlay {
+                            Image(systemName: "person.crop.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(AppColors.secondaryText)
+                        }
+                }
+            }
 
             Text("Discover")
                 .font(.largeTitle.weight(.bold))
@@ -82,7 +116,9 @@ struct DiscoverView: View {
                             systemImageName: option.systemImageName,
                             isSelected: viewModel.selectedCategory == option.title
                         ) {
-                            viewModel.selectedCategory = option.title
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                viewModel.selectedCategory = option.title
+                            }
                         }
                     }
                 }
@@ -94,27 +130,33 @@ struct DiscoverView: View {
     }
 
     private var featuredSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Popular events nearby")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(AppColors.primaryText)
+        Group {
+            if viewModel.selectedCategory == "All" && !viewModel.featuredEvents.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Popular events nearby")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AppColors.primaryText)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    ForEach(viewModel.featuredEvents) { event in
-                        NavigationLink(value: event) {
-                            FeaturedEventCard(
-                                event: event,
-                                dateText: viewModel.dateText(for: event)
-                            )
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 16) {
+                            ForEach(viewModel.featuredEvents) { event in
+                                NavigationLink(value: event) {
+                                    FeaturedEventCard(
+                                        event: event,
+                                        dateText: viewModel.dateText(for: event)
+                                    )
+                                }
+                            }
                         }
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 20)
                     }
+                    .padding(.horizontal, -20)
                 }
-                .padding(.vertical, 4)
-                .padding(.horizontal, 20)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            .padding(.horizontal, -20)
         }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.selectedCategory)
     }
 
     private var nearbySection: some View {
@@ -134,6 +176,7 @@ struct DiscoverView: View {
                 }
             }
         }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.selectedCategory)
     }
 }
 

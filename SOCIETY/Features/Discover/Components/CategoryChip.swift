@@ -25,6 +25,11 @@ struct CategoryChip: View {
                 HStack(spacing: 6) {
                     Image(systemName: systemImageName)
                         .font(.footnote.weight(.semibold))
+                        .foregroundStyle(
+                            isSelected && title != "All"
+                                ? (AppColors.color(for: title) ?? AppColors.primaryText)
+                                : AppColors.primaryText
+                        )
                     Text(title)
                         .font(.subheadline.weight(.semibold))
                 }
@@ -32,7 +37,9 @@ struct CategoryChip: View {
                 .padding(.vertical, 8)
             }
             .foregroundStyle(AppColors.primaryText)
+            .scaleEffect(isSelected ? 1.0 : 0.95)
         }
         .buttonStyle(.plain)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
     }
 }

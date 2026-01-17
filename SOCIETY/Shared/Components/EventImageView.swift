@@ -68,8 +68,8 @@ struct EventImageView: View {
             startColor = AppColors.arts
             endColor = AppColors.arts.opacity(0.6)
         case "music":
-            startColor = AppColors.music
-            endColor = AppColors.music.opacity(0.6)
+            startColor = AppColors.accent
+            endColor = AppColors.accent.opacity(0.6)
         default:
             startColor = AppColors.accent
             endColor = AppColors.accent.opacity(0.6)
