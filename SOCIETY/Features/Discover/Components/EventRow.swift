@@ -37,15 +37,9 @@ struct EventRow: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(AppColors.secondaryText)
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(AppColors.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(AppColors.divider, lineWidth: 1)
-        )
+        .padding(.vertical, 14)
+        .padding(.trailing, 14)
+
     }
 
     private var distanceText: String {

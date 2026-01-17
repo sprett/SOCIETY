@@ -8,23 +8,59 @@
 import Combine
 import SwiftUI
 
+private struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct DiscoverView: View {
     @StateObject private var viewModel = DiscoverViewModel(repository: MockEventRepository())
+    @State private var scrollOffset: CGFloat = 0
 
     var body: some View {
         NavigationStack {
-            ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 24) {
-                    header
-                    categorySection
-                    featuredSection
-                    nearbySection
+            ZStack(alignment: .top) {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        // Spacer to account for sticky header
+                        Color.clear
+                            .frame(height: 68)
+
+                        LazyVStack(alignment: .leading, spacing: 24) {
+                            categorySection
+                            featuredSection
+                            nearbySection
+                        }
+                        .padding(.top, 12)
+                        .padding(.bottom, 40)
+                        .padding(.horizontal, 20)
+                        .background(
+                            GeometryReader { scrollGeometry in
+                                Color.clear
+                                    .preference(
+                                        key: ScrollOffsetPreferenceKey.self,
+                                        value: scrollGeometry.frame(in: .named("scroll")).minY
+                                    )
+                            }
+                        )
+                    }
                 }
-                .padding(.top, 12)
-                .padding(.bottom, 40)
-                .padding(.horizontal, 20)
+                .coordinateSpace(name: "scroll")
+                .background(AppColors.background.ignoresSafeArea())
+                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
+                    scrollOffset = value
+                }
+
+                // Sticky header - always present with blur background
+                header
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
+                    .frame(maxWidth: .infinity)
+                    .allowsHitTesting(true)
             }
-            .background(AppColors.background.ignoresSafeArea())
             .navigationDestination(for: Event.self) { event in
                 EventDetailPlaceholderView(event: event)
             }
@@ -32,9 +68,26 @@ struct DiscoverView: View {
         .tint(AppColors.primaryText)
     }
 
+    @ViewBuilder
+    private var liquidGlassBackground: some View {
+        if #available(iOS 26.0, *) {
+            Color.clear
+                .glassEffect(.regular, in: .circle)
+        } else {
+            // Fallback for iOS < 26 - use ultraThinMaterial for liquid glass effect
+            Color.clear
+                .background(.ultraThinMaterial, in: Circle())
+        }
+    }
+
     private var header: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: URL(string: "https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?q=80&w=2034&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D")) { phase in
+            AsyncImage(
+                url: URL(
+                    string:
+                        "https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?q=80&w=2034&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+                )
+            ) { phase in
                 switch phase {
                 case .empty:
                     Circle()
@@ -85,7 +138,7 @@ struct DiscoverView: View {
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(AppColors.primaryText)
                     .frame(width: 40, height: 40)
-                    .background(AppColors.surface)
+                    .background(liquidGlassBackground)
                     .clipShape(Circle())
             }
 
@@ -96,7 +149,7 @@ struct DiscoverView: View {
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(AppColors.primaryText)
                     .frame(width: 40, height: 40)
-                    .background(AppColors.surface)
+                    .background(liquidGlassBackground)
                     .clipShape(Circle())
             }
         }
