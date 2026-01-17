@@ -26,17 +26,18 @@ struct MainTabView: View {
     
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Home Tab
-            EventListView()
-                .tabItem {
-                    Label("Home", systemImage: "house.fill")
-                }
-                .tag(0)
             
             // Discover Tab
             DiscoverView()
                 .tabItem {
                     Label("Discover", systemImage: "magnifyingglass")
+                }
+                .tag(0)
+            
+            // Home Tab
+            EventListView()
+                .tabItem {
+                    Label("Home", systemImage: "house.fill")
                 }
                 .tag(1)
             
