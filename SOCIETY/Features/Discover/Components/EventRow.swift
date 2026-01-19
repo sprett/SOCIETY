@@ -8,7 +8,8 @@
 import SwiftUI
 
 struct EventRow: View {
-    let event: Event
+    typealias EventModel = SOCIETY.Event
+    let event: EventModel
     let dateText: String
 
     var body: some View {
@@ -46,3 +47,4 @@ struct EventRow: View {
         String(format: "%.1f km", event.distanceKm)
     }
 }
+

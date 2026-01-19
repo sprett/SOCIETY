@@ -5,10 +5,15 @@
 //  Created by Dino Hukanovic on 11/01/2026.
 //
 
+import Combine
 import SwiftUI
 
 struct EventListView: View {
-    @StateObject private var viewModel = EventListViewModel()
+    @StateObject private var viewModel: EventListViewModel
+
+    init(eventRepository: any EventRepository = MockEventRepository()) {
+        _viewModel = StateObject(wrappedValue: EventListViewModel(repository: eventRepository))
+    }
 
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -18,7 +23,7 @@ struct EventListView: View {
     }()
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
                 // Header
                 HStack {
@@ -77,7 +82,7 @@ struct EventCard: View {
                         .foregroundColor(.secondary)
                 }
             }
-            
+
             Spacer()
         }
         .padding()

@@ -1,0 +1,5 @@
+## Xcode / Swift
+DerivedData/
+.DS_Store
+*.xcuserstate
+

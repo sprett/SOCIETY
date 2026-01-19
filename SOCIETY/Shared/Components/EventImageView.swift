@@ -10,7 +10,7 @@ import SwiftUI
 struct EventImageView: View {
     let imageNameOrURL: String
     let category: String
-    
+
     var body: some View {
         ZStack {
             if isURL {
@@ -36,21 +36,21 @@ struct EventImageView: View {
         .clipped()
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
-    
+
     private var isURL: Bool {
         imageNameOrURL.hasPrefix("http://") || imageNameOrURL.hasPrefix("https://")
     }
-    
+
     private var placeholderView: some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(imageGradient)
             .frame(width: 80, height: 80)
     }
-    
+
     private var imageGradient: LinearGradient {
         let startColor: Color
         let endColor: Color
-        
+
         switch category.lowercased() {
         case "tech":
             startColor = AppColors.tech
@@ -74,7 +74,7 @@ struct EventImageView: View {
             startColor = AppColors.accent
             endColor = AppColors.accent.opacity(0.6)
         }
-        
+
         return LinearGradient(
             colors: [startColor, endColor],
             startPoint: .topLeading,

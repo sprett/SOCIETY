@@ -10,8 +10,11 @@ import UIKit
 
 struct MainTabView: View {
     @State private var selectedTab = 0
+    private let dependencies: AppDependencies
     
-    init() {
+    init(dependencies: AppDependencies = AppDependencies(eventRepository: MockEventRepository())) {
+        self.dependencies = dependencies
+
         // Configure tab bar appearance to remove white background section
         let appearance = UITabBarAppearance()
         appearance.configureWithTransparentBackground()
@@ -28,14 +31,14 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             
             // Discover Tab
-            DiscoverView()
+            DiscoverView(eventRepository: dependencies.eventRepository)
                 .tabItem {
                     Label("Discover", systemImage: "magnifyingglass")
                 }
                 .tag(0)
             
             // Home Tab
-            EventListView()
+            EventListView(eventRepository: dependencies.eventRepository)
                 .tabItem {
                     Label("Home", systemImage: "house.fill")
                 }

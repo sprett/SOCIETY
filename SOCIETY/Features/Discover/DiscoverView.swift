@@ -8,16 +8,28 @@
 import Combine
 import SwiftUI
 
-private struct ScrollOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 struct DiscoverView: View {
-    @StateObject private var viewModel = DiscoverViewModel(repository: MockEventRepository())
-    @State private var scrollOffset: CGFloat = 0
+    @StateObject private var viewModel: DiscoverViewModel
+    @State private var selectedEvent: Event?
+    @State private var selectedEventSheetDetent: PresentationDetent = .large
+
+    private var isEventDetailPresented: Bool {
+        selectedEvent != nil
+    }
+
+    private var backgroundBlurRadius: CGFloat {
+        guard isEventDetailPresented else { return 0 }
+        return selectedEventSheetDetent == .large ? 10 : 4
+    }
+
+    private var backgroundDimOpacity: Double {
+        guard isEventDetailPresented else { return 0 }
+        return selectedEventSheetDetent == .large ? 0.12 : 0.06
+    }
+
+    init(eventRepository: any EventRepository = MockEventRepository()) {
+        _viewModel = StateObject(wrappedValue: DiscoverViewModel(repository: eventRepository))
+    }
 
     var body: some View {
         NavigationStack {
@@ -36,22 +48,9 @@ struct DiscoverView: View {
                         .padding(.top, 12)
                         .padding(.bottom, 40)
                         .padding(.horizontal, 20)
-                        .background(
-                            GeometryReader { scrollGeometry in
-                                Color.clear
-                                    .preference(
-                                        key: ScrollOffsetPreferenceKey.self,
-                                        value: scrollGeometry.frame(in: .named("scroll")).minY
-                                    )
-                            }
-                        )
                     }
                 }
-                .coordinateSpace(name: "scroll")
                 .background(AppColors.background.ignoresSafeArea())
-                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
-                    scrollOffset = value
-                }
 
                 // Sticky header - always present with blur background
                 header
@@ -61,11 +60,27 @@ struct DiscoverView: View {
                     .frame(maxWidth: .infinity)
                     .allowsHitTesting(true)
             }
-            .navigationDestination(for: Event.self) { event in
-                EventDetailPlaceholderView(event: event)
-            }
         }
         .tint(AppColors.primaryText)
+        .blur(radius: backgroundBlurRadius)
+        .overlay {
+            if isEventDetailPresented {
+                Rectangle()
+                    .fill(Color.black.opacity(backgroundDimOpacity))
+                    .ignoresSafeArea()
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: isEventDetailPresented)
+        .animation(.easeInOut(duration: 0.18), value: selectedEventSheetDetent)
+        .sheet(item: $selectedEvent) { event in
+            EventDetailView(event: event)
+                .presentationDetents([.medium, .large], selection: $selectedEventSheetDetent)
+                .presentationDragIndicator(.visible)
+        }
+        .onChange(of: selectedEvent) { newValue in
+            guard newValue != nil else { return }
+            selectedEventSheetDetent = .large
+        }
     }
 
     @ViewBuilder
@@ -186,19 +201,22 @@ struct DiscoverView: View {
         Group {
             if viewModel.selectedCategory == "All" && !viewModel.featuredEvents.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Popular events nearby")
+                    Text("Featured events")
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(AppColors.primaryText)
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 16) {
                             ForEach(viewModel.featuredEvents) { event in
-                                NavigationLink(value: event) {
+                                Button {
+                                    selectedEvent = event
+                                } label: {
                                     FeaturedEventCard(
                                         event: event,
                                         dateText: viewModel.dateText(for: event)
                                     )
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
                         .padding(.vertical, 4)
@@ -220,12 +238,15 @@ struct DiscoverView: View {
 
             LazyVStack(spacing: 12) {
                 ForEach(viewModel.nearbyEvents) { event in
-                    NavigationLink(value: event) {
+                    Button {
+                        selectedEvent = event
+                    } label: {
                         EventRow(
                             event: event,
                             dateText: viewModel.dateText(for: event)
                         )
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -244,11 +265,11 @@ final class DiscoverViewModel: ObservableObject {
     @Published private(set) var events: [Event] = []
     @Published var selectedCategory: String = "All"
 
-    private let repository: MockEventRepository
+    private let repository: any EventRepository
 
-    init(repository: MockEventRepository) {
+    init(repository: any EventRepository) {
         self.repository = repository
-        loadEvents()
+        Task { await loadEvents() }
     }
 
     var categoryOptions: [CategoryOption] {
@@ -285,8 +306,13 @@ final class DiscoverViewModel: ObservableObject {
         return events.filter { $0.category == selectedCategory }
     }
 
-    private func loadEvents() {
-        events = repository.fetchEvents()
+    private func loadEvents() async {
+        do {
+            events = try await repository.fetchEvents()
+        } catch {
+            // TODO: surface error in UI when we add a shared error component
+            events = []
+        }
     }
 
     private static let dateFormatter: DateFormatter = {

@@ -10,6 +10,8 @@ import SwiftData
 
 @main
 struct SOCIETYApp: App {
+    private let dependencies = AppDependencies(eventRepository: MockEventRepository())
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Item.self,
@@ -25,7 +27,7 @@ struct SOCIETYApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainTabView()
+            MainTabView(dependencies: dependencies)
         }
         .modelContainer(sharedModelContainer)
     }
