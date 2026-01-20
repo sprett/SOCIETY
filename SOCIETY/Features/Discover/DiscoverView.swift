@@ -77,7 +77,7 @@ struct DiscoverView: View {
                 .presentationDetents([.medium, .large], selection: $selectedEventSheetDetent)
                 .presentationDragIndicator(.visible)
         }
-        .onChange(of: selectedEvent) { newValue in
+        .onChange(of: selectedEvent) { oldValue, newValue in
             guard newValue != nil else { return }
             selectedEventSheetDetent = .large
         }

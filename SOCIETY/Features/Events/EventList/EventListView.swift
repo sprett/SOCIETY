@@ -10,85 +10,202 @@ import SwiftUI
 
 struct EventListView: View {
     @StateObject private var viewModel: EventListViewModel
+    @State private var selectedEvent: Event?
+    @State private var selectedEventSheetDetent: PresentationDetent = .large
 
     init(eventRepository: any EventRepository = MockEventRepository()) {
         _viewModel = StateObject(wrappedValue: EventListViewModel(repository: eventRepository))
     }
 
-    private let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
+    private var isEventDetailPresented: Bool {
+        selectedEvent != nil
+    }
+
+    private var backgroundBlurRadius: CGFloat {
+        guard isEventDetailPresented else { return 0 }
+        return selectedEventSheetDetent == .large ? 10 : 4
+    }
+
+    private var backgroundDimOpacity: Double {
+        guard isEventDetailPresented else { return 0 }
+        return selectedEventSheetDetent == .large ? 0.12 : 0.06
+    }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Header
-                HStack {
-                    Text("Discover Events")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .padding(.top)
+            ZStack(alignment: .top) {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        Color.clear
+                            .frame(height: 68)
 
-                // Event List
-                ScrollView {
-                    LazyVStack(spacing: 16) {
-                        ForEach(viewModel.events) { event in
-                            EventCard(event: event, dateFormatter: dateFormatter)
+                        VStack(alignment: .leading, spacing: 24) {
+                            nextEventSection
+                            attendingSection
                         }
+                        .padding(.top, 12)
+                        .padding(.bottom, 40)
+                        .padding(.horizontal, 20)
                     }
-                    .padding()
-                    .padding(.bottom, 100)  // Add bottom padding so content isn't hidden behind tab bar
                 }
+                .background(AppColors.background.ignoresSafeArea())
+
+                header
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
+                    .frame(maxWidth: .infinity)
+                    .allowsHitTesting(true)
             }
-            .navigationBarHidden(true)
+        }
+        .tint(AppColors.primaryText)
+        .blur(radius: backgroundBlurRadius)
+        .overlay {
+            if isEventDetailPresented {
+                Rectangle()
+                    .fill(Color.black.opacity(backgroundDimOpacity))
+                    .ignoresSafeArea()
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: isEventDetailPresented)
+        .animation(.easeInOut(duration: 0.18), value: selectedEventSheetDetent)
+        .sheet(item: $selectedEvent) { event in
+            EventDetailView(event: event)
+                .presentationDetents([.medium, .large], selection: $selectedEventSheetDetent)
+                .presentationDragIndicator(.visible)
+        }
+        .onChange(of: selectedEvent) { _, newValue in
+            guard newValue != nil else { return }
+            selectedEventSheetDetent = .large
         }
     }
-}
 
-struct EventCard: View {
-    let event: Event
-    let dateFormatter: DateFormatter
+    @ViewBuilder
+    private var liquidGlassBackground: some View {
+        if #available(iOS 26.0, *) {
+            Color.clear
+                .glassEffect(.regular, in: .circle)
+        } else {
+            Color.clear
+                .background(.ultraThinMaterial, in: Circle())
+        }
+    }
 
-    var body: some View {
+    private var header: some View {
         HStack(spacing: 12) {
-            // 1:1 Image
-            EventImageView(imageNameOrURL: event.imageNameOrURL, category: event.category)
-                .frame(width: 80, height: 80)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(event.title)
-                    .font(.headline)
-                    .foregroundColor(.primary)
-
-                HStack {
-                    Image(systemName: "calendar")
-                        .foregroundColor(.secondary)
-                    Text(dateFormatter.string(from: event.startDate))
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-
-                HStack {
-                    Image(systemName: "location")
-                        .foregroundColor(.secondary)
-                    Text("\(event.venueName), \(event.neighborhood)")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+            AsyncImage(
+                url: URL(
+                    string:
+                        "https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?q=80&w=2034&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+                )
+            ) { phase in
+                switch phase {
+                case .empty:
+                    Circle()
+                        .fill(AppColors.surface)
+                        .frame(width: 44, height: 44)
+                        .overlay {
+                            Image(systemName: "person.crop.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(AppColors.secondaryText)
+                        }
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 44, height: 44)
+                        .clipShape(Circle())
+                case .failure:
+                    Circle()
+                        .fill(AppColors.surface)
+                        .frame(width: 44, height: 44)
+                        .overlay {
+                            Image(systemName: "person.crop.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(AppColors.secondaryText)
+                        }
+                @unknown default:
+                    Circle()
+                        .fill(AppColors.surface)
+                        .frame(width: 44, height: 44)
+                        .overlay {
+                            Image(systemName: "person.crop.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(AppColors.secondaryText)
+                        }
                 }
             }
 
+            Text("Society")
+                .font(.largeTitle.weight(.bold))
+                .foregroundStyle(AppColors.primaryText)
+
             Spacer()
+
+            Button {
+                viewModel.createEvent()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(AppColors.primaryText)
+                    .frame(width: 40, height: 40)
+                    .background(liquidGlassBackground)
+                    .clipShape(Circle())
+            }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+    }
+
+    private var nextEventSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Next up")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppColors.primaryText)
+
+            if let event = viewModel.nextEvent {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        Button {
+                            selectedEvent = event
+                        } label: {
+                            FeaturedEventCard(
+                                event: event,
+                                dateText: viewModel.dateText(for: event)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 20)
+                }
+                .padding(.horizontal, -20)
+            } else {
+                Text("No upcoming events yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(AppColors.secondaryText)
+            }
+        }
+    }
+
+    private var attendingSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Attending Events")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppColors.primaryText)
+
+            LazyVStack(spacing: 12) {
+                ForEach(viewModel.events) { event in
+                    Button {
+                        selectedEvent = event
+                    } label: {
+                        EventRow(
+                            event: event,
+                            dateText: viewModel.dateText(for: event)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 }
 

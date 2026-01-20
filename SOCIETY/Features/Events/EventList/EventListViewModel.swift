@@ -31,4 +31,20 @@ final class EventListViewModel: ObservableObject {
     func createEvent() {
         print("Create event button tapped")
     }
+
+    var nextEvent: Event? {
+        let now = Date()
+        if let upcoming = events.filter({ $0.startDate >= now }).sorted(by: { $0.startDate < $1.startDate }).first {
+            return upcoming
+        }
+        return events.sorted(by: { $0.startDate < $1.startDate }).first
+    }
+
+    func dateText(for event: Event) -> String {
+        if let endDate = event.endDate {
+            return EventDateFormatter.dateTimeRange(start: event.startDate, end: endDate)
+        }
+
+        return EventDateFormatter.dateOnly(event.startDate)
+    }
 }

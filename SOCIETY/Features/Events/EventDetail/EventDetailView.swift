@@ -12,7 +12,7 @@ import SwiftUI
 struct EventDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: EventDetailViewModel
-    @State private var heroSide: CGFloat = UIScreen.main.bounds.width - 40
+    @State private var heroSide: CGFloat = 0
 
     init(event: Event) {
         _viewModel = StateObject(wrappedValue: EventDetailViewModel(event: event))
@@ -81,7 +81,7 @@ struct EventDetailView: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.top, 20)
+            .padding(.top, 24)
             .padding(.bottom, 24)
         }
         .background(AppColors.background.ignoresSafeArea())
@@ -112,7 +112,7 @@ struct EventDetailView: View {
         }
         .onPreferenceChange(EventHeroSidePreferenceKey.self) { newWidth in
             // Match height to the rendered width to force 1:1.
-            if heroSide != newWidth, newWidth > 0 {
+            if newWidth > 0 && abs(heroSide - newWidth) > 0.5 {
                 heroSide = newWidth
             }
         }
@@ -306,7 +306,7 @@ struct EventLocationSection: View {
             }
 
             if let coordinate = event.coordinate {
-                EventLocationMap(coordinate: coordinate)
+                EventLocationMap(title: event.venueName, coordinate: coordinate)
             }
         }
     }
@@ -320,6 +320,7 @@ struct EventLocationSection: View {
 }
 
 struct EventLocationMap: View {
+    let title: String
     let coordinate: CLLocationCoordinate2D
 
     var body: some View {
@@ -330,7 +331,7 @@ struct EventLocationMap: View {
         let position = MapCameraPosition.region(region)
 
         Map(position: .constant(position)) {
-            Marker("Event", coordinate: coordinate)
+            Marker(title.isEmpty ? "Location" : title, coordinate: coordinate)
         }
         .frame(height: 180)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
