@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Select an image for your event</string>
+	<key>SUPABASE_ANON_KEY</key>
+	<string>sb_publishable_V3wfriXX2yEkfN27dvrO3w_87RHs4kc</string>
+	<key>SUPABASE_URL</key>
+	<string>https://igezbsrtnlwhqxorqmgm.supabase.co</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

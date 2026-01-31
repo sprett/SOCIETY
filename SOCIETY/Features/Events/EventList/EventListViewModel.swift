@@ -28,13 +28,15 @@ final class EventListViewModel: ObservableObject {
         }
     }
 
-    func createEvent() {
-        print("Create event button tapped")
+    func refresh() {
+        Task { await loadEvents() }
     }
 
     var nextEvent: Event? {
         let now = Date()
-        if let upcoming = events.filter({ $0.startDate >= now }).sorted(by: { $0.startDate < $1.startDate }).first {
+        if let upcoming = events.filter({ $0.startDate >= now }).sorted(by: {
+            $0.startDate < $1.startDate
+        }).first {
             return upcoming
         }
         return events.sorted(by: { $0.startDate < $1.startDate }).first

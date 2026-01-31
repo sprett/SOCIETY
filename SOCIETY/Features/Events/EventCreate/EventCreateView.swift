@@ -1,0 +1,538 @@
+//
+//  EventCreateView.swift
+//  SOCIETY
+//
+//  Created by Dino Hukanovic on 20/01/2026.
+//
+
+import Combine
+import Contacts
+import MapKit
+import PhotosUI
+import SwiftUI
+
+struct EventCreateView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var viewModel: EventCreateViewModel
+
+    init(
+        eventRepository: any EventRepository,
+        authSession: AuthSessionStore,
+        eventImageUploadService: any EventImageUploadService,
+        onCreated: @escaping () -> Void = {}
+    ) {
+        _viewModel = StateObject(
+            wrappedValue: EventCreateViewModel(
+                eventRepository: eventRepository,
+                authSession: authSession,
+                eventImageUploadService: eventImageUploadService,
+                onCreated: onCreated
+            )
+        )
+    }
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 18) {
+                heroPreview
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Create event")
+                        .font(.system(size: 32, weight: .bold))
+                        .foregroundStyle(AppColors.primaryText)
+
+                    Text("Fill in the details. You can edit later.")
+                        .font(.subheadline)
+                        .foregroundStyle(AppColors.tertiaryText)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    EventDetailSectionHeader(title: "Basics")
+
+                    TextField("Title", text: $viewModel.title)
+                        .textInputAutocapitalization(.words)
+                        .padding(12)
+                        .background(
+                            AppColors.surface,
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                    Picker(selection: $viewModel.category) {
+                        ForEach(viewModel.availableCategories, id: \.self) { category in
+                            Text(category).tag(category)
+                        }
+                    } label: {
+                        Text(viewModel.category)
+                            .foregroundStyle(AppColors.primaryText)
+                    }
+                    .pickerStyle(.menu)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        AppColors.surface,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    EventDetailSectionHeader(title: "Time")
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        DatePicker("Start", selection: $viewModel.startDate)
+                            .datePickerStyle(.compact)
+
+                        DatePicker("End", selection: $viewModel.endDate)
+                            .datePickerStyle(.compact)
+                    }
+                    .foregroundStyle(AppColors.primaryText)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    EventDetailSectionHeader(title: "Location")
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        TextField("Search address", text: $viewModel.addressQuery)
+                            .textInputAutocapitalization(.words)
+                            .padding(12)
+                            .background(
+                                AppColors.surface,
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                        if !viewModel.suggestions.isEmpty {
+                            VStack(spacing: 0) {
+                                ForEach(viewModel.suggestions) { suggestion in
+                                    Button {
+                                        Task { await viewModel.selectSuggestion(suggestion) }
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(suggestion.title)
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(AppColors.primaryText)
+                                            if !suggestion.subtitle.isEmpty {
+                                                Text(suggestion.subtitle)
+                                                    .font(.footnote)
+                                                    .foregroundStyle(AppColors.tertiaryText)
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.vertical, 10)
+                                        .padding(.horizontal, 10)
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    Divider().background(AppColors.divider.opacity(0.7))
+                                }
+                            }
+                            .background(
+                                AppColors.elevatedSurface,
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
+                            }
+                        }
+
+                        TextField("Venue name", text: $viewModel.venueName)
+                            .textInputAutocapitalization(.words)
+                            .padding(12)
+                            .background(
+                                AppColors.surface,
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                        if let addressLine = viewModel.addressLine, !addressLine.isEmpty {
+                            Text(addressLine)
+                                .font(.footnote)
+                                .foregroundStyle(AppColors.tertiaryText)
+                        }
+
+                        if let coordinate = viewModel.coordinate {
+                            EventLocationMap(title: viewModel.venueName, coordinate: coordinate)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    EventDetailSectionHeader(title: "Details")
+
+                    TextField("About", text: $viewModel.about, axis: .vertical)
+                        .lineLimit(4, reservesSpace: true)
+                        .padding(12)
+                        .background(
+                            AppColors.surface,
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 40)
+        }
+        .background(AppColors.background.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom) {
+            actionBar
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Close") { dismiss() }
+                    .foregroundStyle(AppColors.primaryText)
+            }
+        }
+        .alert(item: $viewModel.presentedAlert) { alert in
+            switch alert {
+            case .createError(let message):
+                return Alert(
+                    title: Text("Couldn't create event"),
+                    message: Text(message),
+                    dismissButton: .cancel(Text("OK"))
+                )
+            case .imageTooLarge:
+                return Alert(
+                    title: Text("Image too large"),
+                    message: Text("Image must be under 5MB."),
+                    dismissButton: .cancel(Text("OK"))
+                )
+            }
+        }
+        .onChange(of: viewModel.selectedImageItems) { _, _ in
+            Task { await viewModel.loadImageFromSelectedItem() }
+        }
+    }
+
+    private var heroPreview: some View {
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                PhotosPicker(
+                    selection: $viewModel.selectedImageItems,
+                    maxSelectionCount: 1,
+                    matching: .images
+                ) {
+                    ZStack {
+                        if let data = viewModel.selectedImageData, let uiImage = UIImage(data: data)
+                        {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } else {
+                            VStack(spacing: 8) {
+                                Image(systemName: "photo.badge.plus")
+                                    .font(.system(size: 32))
+                                    .foregroundStyle(AppColors.tertiaryText)
+                                Text("Upload image, max 5MB")
+                                    .font(.subheadline)
+                                    .foregroundStyle(AppColors.secondaryText)
+                                Text("Tap to upload")
+                                    .font(.footnote)
+                                    .foregroundStyle(AppColors.tertiaryText)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .stroke(
+                                AppColors.divider.opacity(1),
+                                style: StrokeStyle(lineWidth: 2, dash: [8]))
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+    }
+
+    private var actionBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                Task { await viewModel.createEventAndDismiss(dismiss: dismiss) }
+            } label: {
+                HStack(spacing: 10) {
+                    if viewModel.isSaving {
+                        ProgressView()
+                            .tint(.black)
+                    } else {
+                        Image(systemName: "plus")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    Text("Create")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.black)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .disabled(!viewModel.canCreate || viewModel.isSaving)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
+        .background(
+            .ultraThinMaterial,
+            in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+    }
+}
+
+enum EventCreateAlert: Identifiable {
+    case createError(String)
+    case imageTooLarge
+
+    var id: String {
+        switch self {
+        case .createError: return "createError"
+        case .imageTooLarge: return "imageTooLarge"
+        }
+    }
+}
+
+@MainActor
+final class EventCreateViewModel: ObservableObject {
+    static let defaultCategories: [String] = [
+        "AI",
+        "Tech",
+        "Business",
+        "Networking",
+        "Fitness",
+        "Wellness",
+        "Music",
+        "Art",
+        "Food",
+        "Social",
+    ]
+
+    @Published var title: String = ""
+    @Published var category: String = ""
+    @Published var startDate: Date = Date() {
+        didSet { adjustEndDateIfNeeded() }
+    }
+    @Published var endDate: Date = Date().addingTimeInterval(60 * 60) {
+        didSet {
+            guard !isAutoAdjustingEndDate else { return }
+            hasUserEditedEndDate = true
+        }
+    }
+    @Published var venueName: String = ""
+    @Published var addressQuery: String = "" {
+        didSet { addressSearch.updateQuery(addressQuery) }
+    }
+    @Published var selectedImageItems: [PhotosPickerItem] = []
+    @Published private(set) var selectedImageData: Data?
+    @Published var about: String = ""
+
+    @Published private(set) var suggestions: [AddressSuggestion] = []
+    @Published private(set) var addressLine: String?
+    @Published private(set) var neighborhood: String?
+    @Published private(set) var coordinate: CLLocationCoordinate2D?
+
+    @Published private(set) var isSaving: Bool = false
+    @Published var presentedAlert: EventCreateAlert?
+
+    private let eventRepository: any EventRepository
+    private let authSession: AuthSessionStore
+    private let eventImageUploadService: any EventImageUploadService
+    private let onCreated: () -> Void
+
+    private static let maxImageBytes = 5 * 1024 * 1024
+
+    private let addressSearch = AddressSearchService()
+    private var hasUserEditedEndDate: Bool = false
+    private var isAutoAdjustingEndDate: Bool = false
+
+    init(
+        eventRepository: any EventRepository,
+        authSession: AuthSessionStore,
+        eventImageUploadService: any EventImageUploadService,
+        onCreated: @escaping () -> Void
+    ) {
+        self.eventRepository = eventRepository
+        self.authSession = authSession
+        self.eventImageUploadService = eventImageUploadService
+        self.onCreated = onCreated
+
+        // Keep suggestions in sync.
+        addressSearch.$suggestions.assign(to: &$suggestions)
+
+        // Reasonable defaults for MVP.
+        category = "Tech"
+        adjustEndDateIfNeeded(force: true)
+    }
+
+    func loadImageFromSelectedItem() async {
+        guard let item = selectedImageItems.first else {
+            selectedImageData = nil
+            return
+        }
+        guard let data = try? await item.loadTransferable(type: Data.self) else {
+            selectedImageData = nil
+            return
+        }
+        if data.count > Self.maxImageBytes {
+            selectedImageItems = []
+            selectedImageData = nil
+            presentedAlert = .imageTooLarge
+            return
+        }
+        selectedImageData = data
+    }
+
+    var availableCategories: [String] {
+        Self.defaultCategories
+    }
+
+    var canCreate: Bool {
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        guard !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+        guard let addressLine, !addressLine.isEmpty else { return false }
+        guard !venueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+        guard selectedImageData != nil else { return false }
+        guard !about.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        if endDate <= startDate { return false }
+        return true
+    }
+
+    func selectSuggestion(_ suggestion: AddressSuggestion) async {
+        do {
+            let item = try await addressSearch.resolve(suggestion)
+
+            let formattedAddress: String? = {
+                // Prefer CNPostalAddress when available and compose a single-line string.
+                if let postal = item.placemark.postalAddress {
+                    var components: [String] = []
+                    // Street (e.g., "1 Infinite Loop")
+                    if !postal.street.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        components.append(postal.street)
+                    }
+                    // City/locality
+                    if !postal.city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        components.append(postal.city)
+                    }
+                    // State/region
+                    if !postal.state.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        components.append(postal.state)
+                    }
+                    // Postal code
+                    if !postal.postalCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        components.append(postal.postalCode)
+                    }
+                    // Country
+                    if !postal.country.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        components.append(postal.country)
+                    }
+                    let line = components.joined(separator: ", ")
+                    if !line.isEmpty { return line }
+                }
+
+                // Fall back to MapKit-provided title/subtitle.
+                let fallback = "\(suggestion.title) \(suggestion.subtitle)".trimmingCharacters(
+                    in: .whitespaces)
+                return fallback.isEmpty ? nil : fallback
+            }()
+
+            let bestAddress =
+                formattedAddress
+                ?? "\(suggestion.title) \(suggestion.subtitle)".trimmingCharacters(in: .whitespaces)
+
+            addressLine = bestAddress
+
+            // item.location is non-optional in modern APIs; assign directly.
+            coordinate = item.location.coordinate
+
+            let derivedNeighborhood: String? = {
+                if let postal = item.placemark.postalAddress {
+                    let city = postal.city.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !city.isEmpty { return city }
+                }
+                // Fallbacks from placemark when available
+                if let locality = item.placemark.locality,
+                    !locality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                {
+                    return locality
+                }
+                if let subAdmin = item.placemark.subAdministrativeArea,
+                    !subAdmin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                {
+                    return subAdmin
+                }
+                return nil
+            }()
+            neighborhood = derivedNeighborhood
+
+            addressQuery = bestAddress
+            addressSearch.clearSuggestions()
+
+            if venueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                venueName = item.name ?? suggestion.title
+            }
+        } catch {
+            presentedAlert = .createError(error.localizedDescription)
+        }
+    }
+
+    func createEventAndDismiss(dismiss: DismissAction) async {
+        guard !isSaving else { return }
+        guard let addressLine else { return }
+        guard let imageData = selectedImageData else { return }
+        adjustEndDateIfNeeded()
+
+        isSaving = true
+        defer { isSaving = false }
+
+        do {
+            let imageURL = try await eventImageUploadService.upload(imageData)
+            let ownerID = authSession.userID
+            let draft = EventDraft(
+                ownerID: ownerID,
+                title: title,
+                category: category,
+                startDate: startDate,
+                endDate: endDate,
+                venueName: venueName,
+                addressLine: addressLine,
+                neighborhood: neighborhood,
+                latitude: coordinate?.latitude,
+                longitude: coordinate?.longitude,
+                imageURL: imageURL.absoluteString,
+                about: about,
+                isFeatured: false,
+                visibility: .public
+            )
+
+            _ = try await eventRepository.createEvent(draft)
+            onCreated()
+            dismiss()
+        } catch {
+            presentedAlert = .createError(error.localizedDescription)
+        }
+    }
+
+    private func adjustEndDateIfNeeded(force: Bool = false) {
+        // Keep end time >= start time (+1h default) and auto-update when start changes,
+        // but don't overwrite a user-chosen end time unless it becomes invalid.
+        let defaultEnd = startDate.addingTimeInterval(60 * 60)
+
+        if force || (!hasUserEditedEndDate) || (endDate <= startDate) {
+            isAutoAdjustingEndDate = true
+            endDate = defaultEnd
+            isAutoAdjustingEndDate = false
+        }
+    }
+}
+
+#Preview {
+    EventCreateView(
+        eventRepository: MockEventRepository(),
+        authSession: AuthSessionStore(authRepository: PreviewAuthRepository()),
+        eventImageUploadService: MockEventImageUploadService()
+    )
+}

@@ -305,4 +305,31 @@ final class MockEventRepository: EventRepository {
             ),
         ]
     }
+
+    func createEvent(_ draft: EventDraft) async throws -> Event {
+        Event(
+            id: UUID(),
+            title: draft.title,
+            category: draft.category,
+            startDate: draft.startDate,
+            venueName: draft.venueName,
+            neighborhood: draft.neighborhood ?? "",
+            distanceKm: 0,
+            imageNameOrURL: draft.imageURL ?? "",
+            isFeatured: draft.isFeatured,
+            endDate: draft.endDate,
+            addressLine: draft.addressLine,
+            coordinate: {
+                guard let lat = draft.latitude, let lng = draft.longitude else { return nil }
+                return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+            }(),
+            hosts: nil,
+            goingCount: nil,
+            about: draft.about
+        )
+    }
+
+    func deleteEvent(id: UUID) async throws {
+        // No-op for mock.
+    }
 }

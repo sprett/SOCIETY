@@ -1,5 +1,10 @@
 ## Xcode / Swift
 DerivedData/
+.build/
 .DS_Store
 *.xcuserstate
+xcuserdata/
 
+## Local / temp
+.home/
+.tmp/

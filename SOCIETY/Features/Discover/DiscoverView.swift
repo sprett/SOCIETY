@@ -11,23 +11,22 @@ import SwiftUI
 struct DiscoverView: View {
     @StateObject private var viewModel: DiscoverViewModel
     @State private var selectedEvent: Event?
-    @State private var selectedEventSheetDetent: PresentationDetent = .large
+    private let eventRepository: any EventRepository
 
     private var isEventDetailPresented: Bool {
         selectedEvent != nil
     }
 
     private var backgroundBlurRadius: CGFloat {
-        guard isEventDetailPresented else { return 0 }
-        return selectedEventSheetDetent == .large ? 10 : 4
+        isEventDetailPresented ? 10 : 0
     }
 
     private var backgroundDimOpacity: Double {
-        guard isEventDetailPresented else { return 0 }
-        return selectedEventSheetDetent == .large ? 0.12 : 0.06
+        isEventDetailPresented ? 0.12 : 0
     }
 
     init(eventRepository: any EventRepository = MockEventRepository()) {
+        self.eventRepository = eventRepository
         _viewModel = StateObject(wrappedValue: DiscoverViewModel(repository: eventRepository))
     }
 
@@ -50,7 +49,23 @@ struct DiscoverView: View {
                         .padding(.horizontal, 20)
                     }
                 }
+                .refreshable {
+                    await viewModel.refresh()
+                }
                 .background(AppColors.background.ignoresSafeArea())
+
+                // Top gradient so content doesn't stack under the header (extends into top safe area)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        colors: [AppColors.background, AppColors.background.opacity(0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 200)
+                    .allowsHitTesting(false)
+                    Spacer()
+                }
+                .ignoresSafeArea(edges: .top)
 
                 // Sticky header - always present with blur background
                 header
@@ -71,15 +86,14 @@ struct DiscoverView: View {
             }
         }
         .animation(.easeInOut(duration: 0.18), value: isEventDetailPresented)
-        .animation(.easeInOut(duration: 0.18), value: selectedEventSheetDetent)
         .sheet(item: $selectedEvent) { event in
-            EventDetailView(event: event)
-                .presentationDetents([.medium, .large], selection: $selectedEventSheetDetent)
-                .presentationDragIndicator(.visible)
-        }
-        .onChange(of: selectedEvent) { oldValue, newValue in
-            guard newValue != nil else { return }
-            selectedEventSheetDetent = .large
+            EventDetailView(
+                event: event,
+                eventRepository: eventRepository,
+                onDeleted: { Task { await viewModel.refresh() } }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -313,6 +327,10 @@ final class DiscoverViewModel: ObservableObject {
             // TODO: surface error in UI when we add a shared error component
             events = []
         }
+    }
+
+    func refresh() async {
+        await loadEvents()
     }
 
     private static let dateFormatter: DateFormatter = {

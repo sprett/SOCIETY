@@ -7,10 +7,37 @@
 
 import SwiftUI
 import SwiftData
+import Supabase
 
 @main
 struct SOCIETYApp: App {
-    private let dependencies = AppDependencies(eventRepository: MockEventRepository())
+    private let dependencies: AppDependencies
+    @StateObject private var authSession: AuthSessionStore
+
+    init() {
+        do {
+            let config = try AppConfig.load()
+            let supabase = SupabaseClient(
+                supabaseURL: config.supabaseURL,
+                supabaseKey: config.supabaseAnonKey
+            )
+
+            let authRepository = SupabaseAuthRepository(client: supabase)
+            _authSession = StateObject(wrappedValue: AuthSessionStore(authRepository: authRepository))
+
+            self.dependencies = AppDependencies(
+                supabase: supabase,
+                authRepository: authRepository,
+                eventRepository: SupabaseEventRepository(client: supabase),
+                eventImageUploadService: SupabaseEventImageUploadService(client: supabase)
+            )
+        } catch {
+            // Fallback for previews / misconfigurations.
+            let preview = AppDependencies.preview()
+            _authSession = StateObject(wrappedValue: AuthSessionStore(authRepository: preview.authRepository))
+            self.dependencies = preview
+        }
+    }
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -28,6 +55,7 @@ struct SOCIETYApp: App {
     var body: some Scene {
         WindowGroup {
             MainTabView(dependencies: dependencies)
+                .environmentObject(authSession)
         }
         .modelContainer(sharedModelContainer)
     }

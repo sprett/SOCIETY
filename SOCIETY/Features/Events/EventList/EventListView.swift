@@ -10,10 +10,25 @@ import SwiftUI
 
 struct EventListView: View {
     @StateObject private var viewModel: EventListViewModel
-    @State private var selectedEvent: Event?
-    @State private var selectedEventSheetDetent: PresentationDetent = .large
+    @EnvironmentObject private var authSession: AuthSessionStore
 
-    init(eventRepository: any EventRepository = MockEventRepository()) {
+    private let eventRepository: any EventRepository
+    private let authRepository: any AuthRepository
+    private let eventImageUploadService: any EventImageUploadService
+
+    @State private var selectedEvent: Event?
+    @State private var isLoginPresented: Bool = false
+    @State private var isCreatePresented: Bool = false
+    @State private var createSheetDetent: PresentationDetent = .large
+
+    init(
+        eventRepository: any EventRepository = MockEventRepository(),
+        authRepository: any AuthRepository = PreviewAuthRepository(),
+        eventImageUploadService: any EventImageUploadService = MockEventImageUploadService()
+    ) {
+        self.eventRepository = eventRepository
+        self.authRepository = authRepository
+        self.eventImageUploadService = eventImageUploadService
         _viewModel = StateObject(wrappedValue: EventListViewModel(repository: eventRepository))
     }
 
@@ -21,14 +36,20 @@ struct EventListView: View {
         selectedEvent != nil
     }
 
+    private var isDevAuthBypassEnabled: Bool {
+        #if DEBUG
+            return true
+        #else
+            return false
+        #endif
+    }
+
     private var backgroundBlurRadius: CGFloat {
-        guard isEventDetailPresented else { return 0 }
-        return selectedEventSheetDetent == .large ? 10 : 4
+        isEventDetailPresented ? 10 : 0
     }
 
     private var backgroundDimOpacity: Double {
-        guard isEventDetailPresented else { return 0 }
-        return selectedEventSheetDetent == .large ? 0.12 : 0.06
+        isEventDetailPresented ? 0.12 : 0
     }
 
     var body: some View {
@@ -68,15 +89,38 @@ struct EventListView: View {
             }
         }
         .animation(.easeInOut(duration: 0.18), value: isEventDetailPresented)
-        .animation(.easeInOut(duration: 0.18), value: selectedEventSheetDetent)
         .sheet(item: $selectedEvent) { event in
-            EventDetailView(event: event)
-                .presentationDetents([.medium, .large], selection: $selectedEventSheetDetent)
-                .presentationDragIndicator(.visible)
+            EventDetailView(
+                event: event,
+                eventRepository: eventRepository,
+                onDeleted: { viewModel.refresh() }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
-        .onChange(of: selectedEvent) { _, newValue in
-            guard newValue != nil else { return }
-            selectedEventSheetDetent = .large
+        .sheet(isPresented: $isLoginPresented) {
+            LoginView(
+                authRepository: authRepository,
+                authSession: authSession,
+                onAuthenticated: {
+                    isCreatePresented = true
+                }
+            )
+        }
+        .sheet(isPresented: $isCreatePresented) {
+            EventCreateView(
+                eventRepository: eventRepository,
+                authSession: authSession,
+                eventImageUploadService: eventImageUploadService,
+                onCreated: { viewModel.refresh() }
+            )
+            .presentationDetents([.large], selection: $createSheetDetent)
+            .presentationDragIndicator(.visible)
+        }
+        .onChange(of: isCreatePresented) { _, isPresented in
+            if isPresented {
+                createSheetDetent = .large
+            }
         }
     }
 
@@ -143,7 +187,11 @@ struct EventListView: View {
             Spacer()
 
             Button {
-                viewModel.createEvent()
+                if isDevAuthBypassEnabled || authSession.isAuthenticated {
+                    isCreatePresented = true
+                } else {
+                    isLoginPresented = true
+                }
             } label: {
                 Image(systemName: "plus")
                     .font(.headline.weight(.semibold))
@@ -211,4 +259,5 @@ struct EventListView: View {
 
 #Preview {
     EventListView()
+        .environmentObject(AuthSessionStore(authRepository: PreviewAuthRepository()))
 }

@@ -11,11 +11,21 @@ import SwiftUI
 
 struct EventDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var authSession: AuthSessionStore
     @StateObject private var viewModel: EventDetailViewModel
-    @State private var heroSide: CGFloat = 0
 
-    init(event: Event) {
-        _viewModel = StateObject(wrappedValue: EventDetailViewModel(event: event))
+    init(
+        event: Event,
+        eventRepository: any EventRepository,
+        onDeleted: @escaping () -> Void = {}
+    ) {
+        _viewModel = StateObject(
+            wrappedValue: EventDetailViewModel(
+                event: event,
+                eventRepository: eventRepository,
+                onDeleted: onDeleted
+            )
+        )
     }
 
     var body: some View {
@@ -93,44 +103,58 @@ struct EventDetailView: View {
         ) {
             Button("Share") { viewModel.handleShareTap() }
             Button("Copy link") { viewModel.handleCopyLinkTap() }
+            if authSession.isAuthenticated || isDevAuthBypassEnabled {
+                Button("Delete event", role: .destructive) {
+                    Task { await viewModel.handleDeleteTap() }
+                }
+            }
             Button("Report event", role: .destructive) { viewModel.handleReportTap() }
             Button("Cancel", role: .cancel) {}
         }
+        .alert("Couldn't delete event", isPresented: $viewModel.isDeleteErrorPresented) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.deleteErrorMessage ?? "Unknown error")
+        }
+        .onChange(of: viewModel.shouldDismiss) { _, shouldDismiss in
+            guard shouldDismiss else { return }
+            dismiss()
+        }
+    }
+
+    private var isDevAuthBypassEnabled: Bool {
+#if DEBUG
+        return true
+#else
+        return false
+#endif
     }
 
     private var hero: some View {
-        EventHeroImage(
-            imageNameOrURL: viewModel.event.imageNameOrURL, category: viewModel.event.category
-        )
-        .frame(maxWidth: .infinity)
-        .frame(height: heroSide)
-        .background {
-            GeometryReader { proxy in
-                Color.clear
-                    .preference(key: EventHeroSidePreferenceKey.self, value: proxy.size.width)
+        GeometryReader { geometry in
+            let squareSize = geometry.size.width
+            
+            EventHeroImage(
+                imageNameOrURL: viewModel.event.imageNameOrURL, category: viewModel.event.category
+            )
+            .frame(width: squareSize, height: squareSize)
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
             }
-        }
-        .onPreferenceChange(EventHeroSidePreferenceKey.self) { newWidth in
-            // Match height to the rendered width to force 1:1.
-            if newWidth > 0 && abs(heroSide - newWidth) > 0.5 {
-                heroSide = newWidth
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-        }
-        .overlay(alignment: .topTrailing) {
-            EventDetailFloatingButton(systemImageName: "square.and.arrow.up") {
-                viewModel.handleShareTap()
-            }
-            .padding(14)
-        }
-        .overlay(alignment: .bottomTrailing) {
-            EventVenueBadge(title: viewModel.event.venueName)
+            .overlay(alignment: .topTrailing) {
+                EventDetailFloatingButton(systemImageName: "square.and.arrow.up") {
+                    viewModel.handleShareTap()
+                }
                 .padding(14)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                EventVenueBadge(title: viewModel.event.venueName)
+                    .padding(14)
+            }
         }
+        .aspectRatio(1, contentMode: .fit)
     }
 
     private var actionBar: some View {
@@ -217,9 +241,22 @@ final class EventDetailViewModel: ObservableObject {
 
     @Published var isInterested: Bool = false
     @Published var showMoreActions: Bool = false
+    @Published var shouldDismiss: Bool = false
 
-    init(event: Event) {
+    @Published var isDeleteErrorPresented: Bool = false
+    @Published var deleteErrorMessage: String?
+
+    private let eventRepository: any EventRepository
+    private let onDeleted: () -> Void
+
+    init(
+        event: Event,
+        eventRepository: any EventRepository,
+        onDeleted: @escaping () -> Void
+    ) {
         self.event = event
+        self.eventRepository = eventRepository
+        self.onDeleted = onDeleted
     }
 
     struct OrganizerDisplay: Hashable {
@@ -228,9 +265,15 @@ final class EventDetailViewModel: ObservableObject {
     }
 
     var primaryOrganizer: OrganizerDisplay? {
-        guard let first = event.hosts?.first else { return nil }
-        return OrganizerDisplay(
-            name: first.name, initials: String(first.avatarPlaceholder.prefix(2)))
+        if let first = event.hosts?.first {
+            return OrganizerDisplay(
+                name: first.name,
+                initials: String(first.avatarPlaceholder.prefix(2))
+            )
+        }
+
+        // MVP fallback for events coming from Supabase where we don't yet join host profiles.
+        return OrganizerDisplay(name: "Society", initials: "SO")
     }
 
     var dateText: String {
@@ -267,24 +310,40 @@ final class EventDetailViewModel: ObservableObject {
     func handleOrganizerTap() {
         print("Organizer tapped")
     }
+
+    func handleDeleteTap() async {
+        do {
+            try await eventRepository.deleteEvent(id: event.id)
+            onDeleted()
+            shouldDismiss = true
+        } catch {
+            deleteErrorMessage = error.localizedDescription
+            isDeleteErrorPresented = true
+        }
+    }
 }
 
 // MARK: - Subviews
 
 struct EventDetailSection<Content: View>: View {
+    var showBorder: Bool = true
+    var horizontalPadding: CGFloat = 16
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             content()
         }
-        .padding(16)
+        .padding(.vertical, 16)
+        .padding(.horizontal, horizontalPadding)
         .background(
             AppColors.elevatedSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
+            if showBorder {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
+            }
         }
     }
 }
@@ -441,8 +500,8 @@ struct EventHeroImage: View {
 
     var body: some View {
         ZStack {
-            if isURL {
-                AsyncImage(url: URL(string: imageNameOrURL)) { phase in
+            if let url = resolvedURL {
+                AsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
                         placeholder
@@ -461,11 +520,16 @@ struct EventHeroImage: View {
             }
         }
         .contentShape(Rectangle())
-        .clipped()
     }
 
-    private var isURL: Bool {
-        imageNameOrURL.hasPrefix("http://") || imageNameOrURL.hasPrefix("https://")
+    private var resolvedURL: URL? {
+        let trimmed = imageNameOrURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") else { return nil }
+        if let url = URL(string: trimmed) { return url }
+        // If the user pasted a URL with spaces or unicode, try percent-encoding.
+        let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        guard let encoded, !encoded.isEmpty else { return nil }
+        return URL(string: encoded)
     }
 
     private var placeholder: some View {
@@ -560,13 +624,6 @@ struct EventAvatar: View {
     }
 }
 
-private enum EventHeroSidePreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 #Preview {
     EventDetailView(
         event: Event(
@@ -588,6 +645,8 @@ private enum EventHeroSidePreferenceKey: PreferenceKey {
             ],
             goingCount: 75,
             about: "A relaxed meetup for AI builders in Oslo."
-        )
+        ),
+        eventRepository: MockEventRepository()
     )
+    .environmentObject(AuthSessionStore(authRepository: PreviewAuthRepository()))
 }

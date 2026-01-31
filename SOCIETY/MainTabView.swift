@@ -12,7 +12,7 @@ struct MainTabView: View {
     @State private var selectedTab = 0
     private let dependencies: AppDependencies
     
-    init(dependencies: AppDependencies = AppDependencies(eventRepository: MockEventRepository())) {
+    init(dependencies: AppDependencies = .preview()) {
         self.dependencies = dependencies
 
         // Configure tab bar appearance to remove white background section
@@ -38,7 +38,11 @@ struct MainTabView: View {
                 .tag(0)
             
             // Home Tab
-            EventListView(eventRepository: dependencies.eventRepository)
+            EventListView(
+                eventRepository: dependencies.eventRepository,
+                authRepository: dependencies.authRepository,
+                eventImageUploadService: dependencies.eventImageUploadService
+            )
                 .tabItem {
                     Label("Home", systemImage: "house.fill")
                 }
@@ -55,5 +59,6 @@ struct MainTabView: View {
 }
 
 #Preview {
-    MainTabView()
+    MainTabView(dependencies: .preview())
+        .environmentObject(AuthSessionStore(authRepository: PreviewAuthRepository()))
 }
