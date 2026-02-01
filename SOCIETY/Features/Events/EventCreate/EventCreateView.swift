@@ -363,7 +363,9 @@ final class EventCreateViewModel: ObservableObject {
     }
 
     /// Returns (postalAddress, locality, subAdministrativeArea) from an MKMapItem.
-    private static func addressComponents(from item: MKMapItem) -> (CNPostalAddress?, String?, String?) {
+    private static func addressComponents(from item: MKMapItem) -> (
+        CNPostalAddress?, String?, String?
+    ) {
         (
             item.placemark.postalAddress,
             item.placemark.locality,

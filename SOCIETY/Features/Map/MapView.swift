@@ -8,10 +8,12 @@
 import Combine
 import MapKit
 import SwiftUI
+import UIKit
 
 struct MapView: View {
     @StateObject private var viewModel: MapViewModel
     @EnvironmentObject private var authSession: AuthSessionStore
+    @Environment(\.dismiss) private var dismiss
     @State private var selectedEvent: Event?
     @State private var selectedMarkerID: UUID?
     @State private var position: MapCameraPosition = .region(
@@ -22,11 +24,11 @@ struct MapView: View {
     )
 
     private let eventRepository: any EventRepository
+    private let onDismiss: (() -> Void)?
 
-    init(eventRepository: any EventRepository) {
+    init(eventRepository: any EventRepository, onDismiss: (() -> Void)? = nil) {
         self.eventRepository = eventRepository
-        // Note: authSession is available via @EnvironmentObject and can be used for future personalization
-        // For now, MapViewModel has optional authSession parameter for future features
+        self.onDismiss = onDismiss
         _viewModel = StateObject(wrappedValue: MapViewModel(eventRepository: eventRepository))
     }
 
@@ -52,9 +54,68 @@ struct MapView: View {
 
     private var mapContent: some View {
         ZStack {
+            AppColors.background
+                .ignoresSafeArea()
             eventMap
-            locateMeButton
+            mapOverlayButtons
             loadingIndicator
+        }
+    }
+
+    private var mapOverlayButtons: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    if let onDismiss {
+                        onDismiss()
+                    } else {
+                        dismiss()
+                    }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AppColors.primaryText)
+                        .frame(width: 44, height: 44)
+                        .background(liquidGlassBackground)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Button(action: handleLocateMeTap) {
+                    Image(systemName: "location.fill")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AppColors.primaryText)
+                        .frame(width: 44, height: 44)
+                        .background(liquidGlassBackground)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .allowsHitTesting(true)
+
+            Spacer()
+                .allowsHitTesting(false)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .zIndex(100)
+    }
+
+    @ViewBuilder
+    private var liquidGlassBackground: some View {
+        if #available(iOS 26.0, *) {
+            Color.clear
+                .glassEffect(.regular, in: .circle)
+        } else {
+            Color.clear
+                .background(.ultraThinMaterial, in: Circle())
         }
     }
 
@@ -78,6 +139,8 @@ struct MapView: View {
         .onMapCameraChange { context in
             position = .region(context.region)
         }
+        .padding(.top, 40)
+        .padding(.bottom, 20)
         .ignoresSafeArea(edges: [.top, .bottom])
         .onAppear {
             handleMapAppear()
@@ -88,26 +151,6 @@ struct MapView: View {
         }
         .onChange(of: selectedMarkerID) { _, markerID in
             handleMarkerSelection(markerID)
-        }
-    }
-
-    private var locateMeButton: some View {
-        VStack {
-            HStack {
-                Spacer()
-                Button(action: handleLocateMeTap) {
-                    Image(systemName: "location.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
-                        .background(AppColors.accent)
-                        .clipShape(Circle())
-                        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                }
-                .padding(.trailing, 20)
-                .padding(.top, 20)
-            }
-            Spacer()
         }
     }
 
@@ -152,6 +195,7 @@ struct MapView: View {
     }
 
     private func handleLocateMeTap() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         viewModel.centerOnUserLocation()
         if let region = viewModel.regionForUserLocation() {
             withAnimation {

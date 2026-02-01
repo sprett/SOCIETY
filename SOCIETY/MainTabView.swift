@@ -46,10 +46,10 @@ struct MainTabView: View {
             }
             .tag(1)
             
-            // Map Tab
-            MapView(eventRepository: dependencies.eventRepository)
+            // Feed Tab
+            FeedView(eventRepository: dependencies.eventRepository)
                 .tabItem {
-                    Label("Map", systemImage: "map.fill")
+                    Label("Feed", systemImage: "list.bullet")
                 }
                 .tag(2)
         }

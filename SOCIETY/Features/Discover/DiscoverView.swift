@@ -13,6 +13,7 @@ struct DiscoverView: View {
     @EnvironmentObject private var authSession: AuthSessionStore
     @State private var selectedEvent: Event?
     @State private var isProfilePresented: Bool = false
+    @State private var isMapPresented: Bool = false
     private let eventRepository: any EventRepository
     private let profileImageUploadService: any ProfileImageUploadService
     private let onHostEventTapped: (() -> Void)?
@@ -117,6 +118,10 @@ struct DiscoverView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
+        .fullScreenCover(isPresented: $isMapPresented) {
+            MapView(eventRepository: eventRepository, onDismiss: { isMapPresented = false })
+                .environmentObject(authSession)
+        }
     }
 
     @ViewBuilder
@@ -147,7 +152,7 @@ struct DiscoverView: View {
             Spacer()
 
             Button {
-                viewModel.handleMapTap()
+                isMapPresented = true
             } label: {
                 Image(systemName: "map")
                     .font(.headline.weight(.semibold))
@@ -334,10 +339,6 @@ final class DiscoverViewModel: ObservableObject {
 
     func handleSearchTap() {
         print("Discover search tapped")
-    }
-
-    func handleMapTap() {
-        print("Discover map tapped")
     }
 
     private var filteredEvents: [Event] {

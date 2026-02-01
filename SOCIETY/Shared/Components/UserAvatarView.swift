@@ -54,7 +54,10 @@ struct UserAvatarView: View {
 #Preview {
     VStack(spacing: 20) {
         UserAvatarView(size: 44)
-        UserAvatarView(imageURL: "https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?q=80&w=2034&auto=format&fit=crop", size: 44)
+        UserAvatarView(
+            imageURL:
+                "https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?q=80&w=2034&auto=format&fit=crop",
+            size: 44)
         UserAvatarView(size: 120)
     }
     .padding()
