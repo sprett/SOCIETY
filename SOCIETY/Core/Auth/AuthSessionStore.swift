@@ -5,9 +5,9 @@
 //  Created by Dino Hukanovic on 20/01/2026.
 //
 
-import Foundation
-import Combine
 import AuthenticationServices
+import Combine
+import Foundation
 
 @MainActor
 final class AuthSessionStore: ObservableObject {
@@ -30,6 +30,11 @@ final class AuthSessionStore: ObservableObject {
         userEmail = await authRepository.currentUserEmail()
         userName = await authRepository.currentUserName()
         profileImageURL = await authRepository.currentUserProfileImageURL()
+    }
+
+    /// Returns the current profile image URL from the server. Use this when you need the authoritative value (e.g. before replacing the image) rather than the cached published property.
+    func getCurrentProfileImageURL() async -> String? {
+        await authRepository.currentUserProfileImageURL()
     }
 
     func signIn(email: String, password: String) async throws {
@@ -63,4 +68,3 @@ final class AuthSessionStore: ObservableObject {
         await refresh()
     }
 }
-

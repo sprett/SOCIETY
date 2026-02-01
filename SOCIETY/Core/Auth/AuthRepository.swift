@@ -5,8 +5,8 @@
 //  Created by Dino Hukanovic on 20/01/2026.
 //
 
-import Foundation
 import AuthenticationServices
+import Foundation
 
 protocol AuthRepository {
     func currentUserID() async -> UUID?
@@ -35,4 +35,3 @@ final class PreviewAuthRepository: AuthRepository {
     func updateUserName(_ name: String) async throws {}
     func updateUserProfileImage(_ imageURL: String) async throws {}
 }
-

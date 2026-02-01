@@ -78,12 +78,18 @@ final class ProfileViewModel: ObservableObject {
 
     func uploadProfileImage() async {
         guard let imageData = selectedImageData else { return }
+        // Fetch current profile image URL from server so we always have the right URL to delete (avoids nil/stale from cache)
+        let oldProfileImageURL = await authSession.getCurrentProfileImageURL()
         isLoading = true
         errorMessage = nil
 
         do {
             let url = try await profileImageUploadService.upload(imageData)
             try await authSession.updateProfileImage(url.absoluteString)
+            // Delete previous profile image from storage to avoid orphaned files
+            if let oldURL = oldProfileImageURL {
+                await profileImageUploadService.deleteFromStorageIfOwned(url: oldURL)
+            }
             // Clear selected data after a brief moment to allow UI to update
             // The profileImageURL will be updated via the Combine subscription to authSession
             try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds to allow refresh

@@ -5,9 +5,9 @@
 //  Created by Dino Hukanovic on 20/01/2026.
 //
 
+import AuthenticationServices
 import Foundation
 import Supabase
-import AuthenticationServices
 
 final class SupabaseAuthRepository: AuthRepository {
     private let client: SupabaseClient
@@ -44,16 +44,16 @@ final class SupabaseAuthRepository: AuthRepository {
             let session = try await client.auth.session
             if session.isExpired { return nil }
             // Try to get name from user metadata (stored during Sign in with Apple)
-            if let fullName = session.user.userMetadata["full_name"] as? String {
+            if case .string(let fullName)? = session.user.userMetadata["full_name"] {
                 return fullName
             }
             // Fallback to individual name components
-            if let givenName = session.user.userMetadata["given_name"] as? String,
-               let familyName = session.user.userMetadata["family_name"] as? String
+            if case .string(let givenName)? = session.user.userMetadata["given_name"],
+                case .string(let familyName)? = session.user.userMetadata["family_name"]
             {
                 return "\(givenName) \(familyName)"
             }
-            if let givenName = session.user.userMetadata["given_name"] as? String {
+            if case .string(let givenName)? = session.user.userMetadata["given_name"] {
                 return givenName
             }
             return nil
@@ -69,14 +69,15 @@ final class SupabaseAuthRepository: AuthRepository {
             if session.isExpired { return nil }
             
             // Check userMetadata for profile_image_url
-            if let profileImageURL = session.user.userMetadata["profile_image_url"] as? String {
+            if case .string(let profileImageURL)? = session.user.userMetadata["profile_image_url"] {
                 return profileImageURL
             }
             
             // If not in metadata, try fetching fresh user data
             // This ensures we get the latest metadata after updates
             let user = try await client.auth.user()
-            return user.userMetadata["profile_image_url"] as? String
+            if case .string(let url)? = user.userMetadata["profile_image_url"] { return url }
+            return nil
         } catch {
             return nil
         }
@@ -92,9 +93,11 @@ final class SupabaseAuthRepository: AuthRepository {
 
     func signInWithApple(credential: ASAuthorizationAppleIDCredential) async throws {
         guard let identityToken = credential.identityToken,
-              let idTokenString = String(data: identityToken, encoding: .utf8)
+            let idTokenString = String(data: identityToken, encoding: .utf8)
         else {
-            throw NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to get identity token"])
+            throw NSError(
+                domain: "AuthError", code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to get identity token"])
         }
 
         // Sign in with Supabase using the Apple ID token
@@ -107,19 +110,19 @@ final class SupabaseAuthRepository: AuthRepository {
                 nonce: nil
             )
         )
-        
+
         // Apple only provides the user's full name during the first sign-in attempt
         // Save it to user metadata for future use (as recommended by Supabase docs)
         if let fullName = credential.fullName {
             var metadata: [String: AnyJSON] = [:]
-            
+
             if let givenName = fullName.givenName {
                 metadata["given_name"] = .string(givenName)
             }
             if let familyName = fullName.familyName {
                 metadata["family_name"] = .string(familyName)
             }
-            
+
             // Construct full name
             let fullNameString: String
             if let givenName = fullName.givenName, let familyName = fullName.familyName {
@@ -131,11 +134,11 @@ final class SupabaseAuthRepository: AuthRepository {
             } else {
                 fullNameString = ""
             }
-            
+
             if !fullNameString.isEmpty {
                 metadata["full_name"] = .string(fullNameString)
             }
-            
+
             // Update user metadata with name information
             if !metadata.isEmpty {
                 try await client.auth.update(user: UserAttributes(data: metadata))
@@ -159,4 +162,3 @@ final class SupabaseAuthRepository: AuthRepository {
         try await client.auth.update(user: UserAttributes(data: metadata))
     }
 }
-

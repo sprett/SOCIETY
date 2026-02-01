@@ -5,16 +5,17 @@
 //  Created by Dino Hukanovic on 11/01/2026.
 //
 
-import SwiftUI
-import SwiftData
 import Supabase
+import SwiftData
+import SwiftUI
 import UIKit
 
 @main
 struct SOCIETYApp: App {
     private let dependencies: AppDependencies
     @StateObject private var authSession: AuthSessionStore
-    @AppStorage(AppearanceMode.storageKey) private var appearanceMode: String = AppearanceMode.system.rawValue
+    @AppStorage(AppearanceMode.storageKey) private var appearanceMode: String = AppearanceMode
+        .system.rawValue
 
     init() {
         Self.configureTabBarAppearance()
@@ -28,7 +29,8 @@ struct SOCIETYApp: App {
             )
 
             let authRepository = SupabaseAuthRepository(client: supabase)
-            _authSession = StateObject(wrappedValue: AuthSessionStore(authRepository: authRepository))
+            _authSession = StateObject(
+                wrappedValue: AuthSessionStore(authRepository: authRepository))
 
             self.dependencies = AppDependencies(
                 supabase: supabase,
@@ -40,7 +42,8 @@ struct SOCIETYApp: App {
         } catch {
             // Fallback for previews / misconfigurations.
             let preview = AppDependencies.preview()
-            _authSession = StateObject(wrappedValue: AuthSessionStore(authRepository: preview.authRepository))
+            _authSession = StateObject(
+                wrappedValue: AuthSessionStore(authRepository: preview.authRepository))
             self.dependencies = preview
         }
     }
@@ -57,7 +60,7 @@ struct SOCIETYApp: App {
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            Item.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -87,7 +90,9 @@ struct SOCIETYApp: App {
             .onChange(of: appearanceMode) { _, newValue in
                 applyWindowAppearance()
                 if AppearanceMode(rawValue: newValue) == .system {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { applyWindowAppearance() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        applyWindowAppearance()
+                    }
                 }
             }
         }

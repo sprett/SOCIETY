@@ -199,7 +199,8 @@ struct EventCreateView: View {
 
 extension EventCreateView {
     private var heroPreview: some View {
-        PhotosPicker(
+        let imageData = viewModel.selectedImageData
+        return PhotosPicker(
             selection: $viewModel.selectedImageItems,
             maxSelectionCount: 1,
             matching: .images
@@ -208,8 +209,7 @@ extension EventCreateView {
                 .aspectRatio(1, contentMode: .fit)
                 .overlay(alignment: .center) {
                     Group {
-                        if let data = viewModel.selectedImageData, let uiImage = UIImage(data: data)
-                        {
+                        if let data = imageData, let uiImage = UIImage(data: data) {
                             Image(uiImage: uiImage)
                                 .resizable()
                                 .scaledToFill()
@@ -232,7 +232,7 @@ extension EventCreateView {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                 .overlay {
-                    if viewModel.selectedImageData == nil {
+                    if imageData == nil {
                         RoundedRectangle(cornerRadius: 28, style: .continuous)
                             .stroke(
                                 AppColors.divider.opacity(1),
@@ -357,6 +357,20 @@ final class EventCreateViewModel: ObservableObject {
         isAutoAdjustingEndDate = false
     }
 
+    /// Returns CNPostalAddress from an MKMapItem. Uses placemark (deprecated in iOS 26 in favor of address/addressRepresentations).
+    private static func postalAddress(from item: MKMapItem) -> CNPostalAddress? {
+        item.placemark.postalAddress
+    }
+
+    /// Returns (postalAddress, locality, subAdministrativeArea) from an MKMapItem.
+    private static func addressComponents(from item: MKMapItem) -> (CNPostalAddress?, String?, String?) {
+        (
+            item.placemark.postalAddress,
+            item.placemark.locality,
+            item.placemark.subAdministrativeArea
+        )
+    }
+
     /// Rounds a date to the nearest 15-minute boundary (e.g. 10:07 → 10:00, 10:08 → 10:15).
     static func roundToFifteenMinutes(_ date: Date) -> Date {
         let calendar = Calendar.current
@@ -417,7 +431,8 @@ final class EventCreateViewModel: ObservableObject {
 
             let formattedAddress: String? = {
                 // Prefer CNPostalAddress when available and compose a single-line string.
-                if let postal = item.placemark.postalAddress {
+                let postal = Self.postalAddress(from: item)
+                if let postal = postal {
                     var components: [String] = []
                     // Street (e.g., "1 Infinite Loop")
                     if !postal.street.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -459,17 +474,17 @@ final class EventCreateViewModel: ObservableObject {
             coordinate = item.location.coordinate
 
             let derivedNeighborhood: String? = {
-                if let postal = item.placemark.postalAddress {
+                if let postal = Self.postalAddress(from: item) {
                     let city = postal.city.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !city.isEmpty { return city }
                 }
-                // Fallbacks from placemark when available
-                if let locality = item.placemark.locality,
+                let (_, locality, subAdmin) = Self.addressComponents(from: item)
+                if let locality = locality,
                     !locality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 {
                     return locality
                 }
-                if let subAdmin = item.placemark.subAdministrativeArea,
+                if let subAdmin = subAdmin,
                     !subAdmin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 {
                     return subAdmin

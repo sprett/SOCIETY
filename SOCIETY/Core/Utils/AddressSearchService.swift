@@ -5,6 +5,7 @@
 //  Created by Dino Hukanovic on 20/01/2026.
 //
 
+import CoreLocation
 import Foundation
 import Combine
 import MapKit
@@ -50,7 +51,11 @@ final class AddressSearchService: NSObject, ObservableObject {
         let search = MKLocalSearch(request: request)
         let response = try await search.startAsync()
         if let first = response.mapItems.first { return first }
-        return MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: 0, longitude: 0)))
+        if #available(iOS 26.0, *) {
+            return MKMapItem(location: CLLocation(latitude: 0, longitude: 0), address: nil)
+        } else {
+            return MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: 0, longitude: 0)))
+        }
     }
 }
 

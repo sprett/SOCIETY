@@ -57,7 +57,7 @@ final class MapViewModel: ObservableObject {
     }
 
     func centerOnUserLocation() {
-        guard let userLocation = userLocation else {
+        guard userLocation != nil else {
             // Request location if we don't have it yet
             if locationAuthorizationStatus == .authorizedWhenInUse
                 || locationAuthorizationStatus == .authorizedAlways

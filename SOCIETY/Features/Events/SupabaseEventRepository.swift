@@ -17,7 +17,7 @@ final class SupabaseEventRepository: EventRepository {
     }
 
     func fetchEvents() async throws -> [Event] {
-        let rows: [EventDBRow] = try await client.database
+        let rows: [EventDBRow] = try await client
             .from("events")
             .select()
             .order("start_at", ascending: true)
@@ -30,7 +30,7 @@ final class SupabaseEventRepository: EventRepository {
     func createEvent(_ draft: EventDraft) async throws -> Event {
         let insert = EventInsertRow(from: draft)
 
-        let row: EventDBRow = try await client.database
+        let row: EventDBRow = try await client
             .from("events")
             .insert(insert)
             .select()
@@ -42,7 +42,7 @@ final class SupabaseEventRepository: EventRepository {
     }
 
     func deleteEvent(id: UUID) async throws {
-        _ = try await client.database
+        _ = try await client
             .from("events")
             .delete()
             .eq("id", value: id.uuidString)
