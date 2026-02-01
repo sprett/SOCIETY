@@ -94,7 +94,10 @@ struct EventListView: View {
             EventDetailView(
                 event: event,
                 eventRepository: eventRepository,
-                onDeleted: { viewModel.refresh() }
+                eventImageUploadService: eventImageUploadService,
+                authSession: authSession,
+                onDeleted: { viewModel.refresh() },
+                onCoverChanged: { viewModel.refresh() }
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)

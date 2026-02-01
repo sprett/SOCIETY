@@ -9,12 +9,18 @@ import SwiftUI
 
 struct FeedView: View {
     @StateObject private var viewModel: FeedViewModel
+    @EnvironmentObject private var authSession: AuthSessionStore
     @State private var selectedEvent: Event?
 
     private let eventRepository: any EventRepository
+    private let eventImageUploadService: any EventImageUploadService
 
-    init(eventRepository: any EventRepository = MockEventRepository()) {
+    init(
+        eventRepository: any EventRepository = MockEventRepository(),
+        eventImageUploadService: any EventImageUploadService = MockEventImageUploadService()
+    ) {
         self.eventRepository = eventRepository
+        self.eventImageUploadService = eventImageUploadService
         _viewModel = StateObject(wrappedValue: FeedViewModel(repository: eventRepository))
     }
 
@@ -56,7 +62,10 @@ struct FeedView: View {
             EventDetailView(
                 event: event,
                 eventRepository: eventRepository,
-                onDeleted: { Task { await viewModel.refresh() } }
+                eventImageUploadService: eventImageUploadService,
+                authSession: authSession,
+                onDeleted: { Task { await viewModel.refresh() } },
+                onCoverChanged: { Task { await viewModel.refresh() } }
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -85,4 +94,5 @@ struct FeedView: View {
 
 #Preview {
     FeedView(eventRepository: MockEventRepository())
+        .environmentObject(AuthSessionStore(authRepository: PreviewAuthRepository()))
 }

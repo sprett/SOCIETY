@@ -37,7 +37,8 @@ struct SOCIETYApp: App {
                 authRepository: authRepository,
                 eventRepository: SupabaseEventRepository(client: supabase),
                 eventImageUploadService: SupabaseEventImageUploadService(client: supabase),
-                profileImageUploadService: SupabaseProfileImageUploadService(client: supabase)
+                profileImageUploadService: SupabaseProfileImageUploadService(client: supabase),
+                locationManager: LocationManager()
             )
         } catch {
             // Fallback for previews / misconfigurations.

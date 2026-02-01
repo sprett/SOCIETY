@@ -11,6 +11,8 @@ struct EventRow: View {
     typealias EventModel = SOCIETY.Event
     let event: EventModel
     let dateText: String
+    /// When set, used instead of `event.distanceKm` (e.g. distance from user's current location).
+    var displayDistanceKm: Double? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -44,7 +46,8 @@ struct EventRow: View {
     }
 
     private var distanceText: String {
-        String(format: "%.1f km", event.distanceKm)
+        let km = displayDistanceKm ?? event.distanceKm
+        return String(format: "%.1f km", km)
     }
 }
 

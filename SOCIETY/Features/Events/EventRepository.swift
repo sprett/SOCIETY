@@ -10,6 +10,7 @@ import Foundation
 protocol EventRepository {
     func fetchEvents() async throws -> [Event]
     func createEvent(_ draft: EventDraft) async throws -> Event
+    func updateEventCover(eventID: UUID, imageURL: String) async throws
     func deleteEvent(id: UUID) async throws
 }
 

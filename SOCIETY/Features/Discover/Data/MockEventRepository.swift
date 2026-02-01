@@ -16,6 +16,7 @@ final class MockEventRepository: EventRepository {
         return [
             Event(
                 id: UUID(),
+                ownerID: nil,
                 title: "Nordic AI Night",
                 category: "AI",
                 startDate: calendar.date(byAdding: .day, value: 1, to: now) ?? now,
@@ -39,6 +40,7 @@ final class MockEventRepository: EventRepository {
             ),
             Event(
                 id: UUID(),
+                ownerID: nil,
                 title: "Fjordside Fitness",
                 category: "Fitness",
                 startDate: calendar.date(byAdding: .day, value: 2, to: now) ?? now,
@@ -61,6 +63,7 @@ final class MockEventRepository: EventRepository {
             ),
             Event(
                 id: UUID(),
+                ownerID: nil,
                 title: "Oslo Climate Salon",
                 category: "Climate",
                 startDate: calendar.date(byAdding: .day, value: 3, to: now) ?? now,
@@ -84,6 +87,7 @@ final class MockEventRepository: EventRepository {
             ),
             Event(
                 id: UUID(),
+                ownerID: nil,
                 title: "Tech Founders Mixer",
                 category: "Tech",
                 startDate: calendar.date(byAdding: .day, value: 4, to: now) ?? now,
@@ -106,6 +110,7 @@ final class MockEventRepository: EventRepository {
             ),
             Event(
                 id: UUID(),
+                ownerID: nil,
                 title: "Nordic Design Talk",
                 category: "Arts & Culture",
                 startDate: calendar.date(byAdding: .day, value: 5, to: now) ?? now,
@@ -128,6 +133,7 @@ final class MockEventRepository: EventRepository {
             ),
             Event(
                 id: UUID(),
+                ownerID: nil,
                 title: "Sourdough & Stories",
                 category: "Food & Drink",
                 startDate: calendar.date(byAdding: .day, value: 6, to: now) ?? now,
@@ -151,6 +157,7 @@ final class MockEventRepository: EventRepository {
             ),
             Event(
                 id: UUID(),
+                ownerID: nil,
                 title: "Wellness Wind Down",
                 category: "Wellness",
                 startDate: calendar.date(byAdding: .day, value: 7, to: now) ?? now,
@@ -173,6 +180,7 @@ final class MockEventRepository: EventRepository {
             ),
             Event(
                 id: UUID(),
+                ownerID: nil,
                 title: "AI Product Lab",
                 category: "AI",
                 startDate: calendar.date(byAdding: .day, value: 8, to: now) ?? now,
@@ -195,6 +203,7 @@ final class MockEventRepository: EventRepository {
             ),
             Event(
                 id: UUID(),
+                ownerID: nil,
                 title: "City Night Run",
                 category: "Fitness",
                 startDate: calendar.date(byAdding: .day, value: 9, to: now) ?? now,
@@ -216,6 +225,7 @@ final class MockEventRepository: EventRepository {
             ),
             Event(
                 id: UUID(),
+                ownerID: nil,
                 title: "Climate Tech Demo Day",
                 category: "Climate",
                 startDate: calendar.date(byAdding: .day, value: 10, to: now) ?? now,
@@ -239,6 +249,7 @@ final class MockEventRepository: EventRepository {
             ),
             Event(
                 id: UUID(),
+                ownerID: nil,
                 title: "Midnight Jazz Session",
                 category: "Arts & Culture",
                 startDate: calendar.date(byAdding: .day, value: 11, to: now) ?? now,
@@ -261,6 +272,7 @@ final class MockEventRepository: EventRepository {
             ),
             Event(
                 id: UUID(),
+                ownerID: nil,
                 title: "Oslo Food Crawl",
                 category: "Food & Drink",
                 startDate: calendar.date(byAdding: .day, value: 12, to: now) ?? now,
@@ -283,6 +295,7 @@ final class MockEventRepository: EventRepository {
             ),
             Event(
                 id: UUID(),
+                ownerID: nil,
                 title: "Mindful Morning",
                 category: "Wellness",
                 startDate: calendar.date(byAdding: .day, value: 13, to: now) ?? now,
@@ -309,6 +322,7 @@ final class MockEventRepository: EventRepository {
     func createEvent(_ draft: EventDraft) async throws -> Event {
         Event(
             id: UUID(),
+            ownerID: draft.ownerID,
             title: draft.title,
             category: draft.category,
             startDate: draft.startDate,
@@ -327,6 +341,10 @@ final class MockEventRepository: EventRepository {
             goingCount: nil,
             about: draft.about
         )
+    }
+
+    func updateEventCover(eventID: UUID, imageURL: String) async throws {
+        // No-op for mock.
     }
 
     func deleteEvent(id: UUID) async throws {

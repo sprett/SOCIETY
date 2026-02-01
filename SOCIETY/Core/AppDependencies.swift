@@ -14,6 +14,7 @@ struct AppDependencies {
     let eventRepository: any EventRepository
     let eventImageUploadService: any EventImageUploadService
     let profileImageUploadService: any ProfileImageUploadService
+    let locationManager: LocationManager
 }
 
 extension AppDependencies {
@@ -28,7 +29,8 @@ extension AppDependencies {
             authRepository: PreviewAuthRepository(),
             eventRepository: MockEventRepository(),
             eventImageUploadService: MockEventImageUploadService(),
-            profileImageUploadService: MockProfileImageUploadService()
+            profileImageUploadService: MockProfileImageUploadService(),
+            locationManager: LocationManager()
         )
     }
 }

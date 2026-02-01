@@ -41,6 +41,18 @@ final class SupabaseEventRepository: EventRepository {
         return row.toDomain()
     }
 
+    func updateEventCover(eventID: UUID, imageURL: String) async throws {
+        struct UpdateCover: Encodable {
+            let imageURL: String
+            enum CodingKeys: String, CodingKey { case imageURL = "image_url" }
+        }
+        _ = try await client
+            .from("events")
+            .update(UpdateCover(imageURL: imageURL))
+            .eq("id", value: eventID.uuidString)
+            .execute()
+    }
+
     func deleteEvent(id: UUID) async throws {
         _ = try await client
             .from("events")
@@ -142,6 +154,7 @@ private struct EventDBRow: Decodable {
 
         return Event(
             id: id,
+            ownerID: ownerID,
             title: title,
             category: category,
             startDate: startAt,

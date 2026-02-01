@@ -7,23 +7,29 @@
 
 import Combine
 import MapKit
+import PhotosUI
 import SwiftUI
 
 struct EventDetailView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var authSession: AuthSessionStore
     @StateObject private var viewModel: EventDetailViewModel
 
     init(
         event: Event,
         eventRepository: any EventRepository,
-        onDeleted: @escaping () -> Void = {}
+        eventImageUploadService: any EventImageUploadService,
+        authSession: AuthSessionStore,
+        onDeleted: @escaping () -> Void = {},
+        onCoverChanged: @escaping () -> Void = {}
     ) {
         _viewModel = StateObject(
             wrappedValue: EventDetailViewModel(
                 event: event,
                 eventRepository: eventRepository,
-                onDeleted: onDeleted
+                eventImageUploadService: eventImageUploadService,
+                authSession: authSession,
+                onDeleted: onDeleted,
+                onCoverChanged: onCoverChanged
             )
         )
     }
@@ -44,10 +50,17 @@ struct EventDetailView: View {
                             viewModel.handleOrganizerTap()
                         } label: {
                             HStack(spacing: 8) {
-                                EventAvatar(
-                                    initials: organizer.initials, category: viewModel.event.category
-                                )
-                                .frame(width: 18, height: 18)
+                                Group {
+                                    if let url = organizer.profileImageURL {
+                                        UserAvatarView(imageURL: url, size: 18)
+                                    } else {
+                                        EventAvatar(
+                                            initials: organizer.initials,
+                                            category: viewModel.event.category
+                                        )
+                                        .frame(width: 18, height: 18)
+                                    }
+                                }
 
                                 Text(organizer.name)
                                     .font(.subheadline.weight(.semibold))
@@ -103,11 +116,20 @@ struct EventDetailView: View {
         ) {
             Button("Share") { viewModel.handleShareTap() }
             Button("Copy link") { viewModel.handleCopyLinkTap() }
+            if viewModel.isOwner {
+                Button("Change cover") { viewModel.showChangeCoverSheet = true }
+            }
             Button("Delete event", role: .destructive) {
                 Task { await viewModel.handleDeleteTap() }
             }
             Button("Report event", role: .destructive) { viewModel.handleReportTap() }
             Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $viewModel.showChangeCoverSheet) {
+            changeCoverSheet
+        }
+        .onChange(of: viewModel.changeCoverItem) { _, _ in
+            Task { await viewModel.uploadNewCoverAndReplace() }
         }
         .alert("Couldn't delete event", isPresented: $viewModel.isDeleteErrorPresented) {
             Button("OK", role: .cancel) {}
@@ -223,47 +245,98 @@ struct EventDetailView: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
     }
+
+    private var changeCoverSheet: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                Text("Choose a new cover image")
+                    .font(.headline)
+                    .foregroundStyle(AppColors.primaryText)
+                PhotosPicker(
+                    selection: $viewModel.changeCoverItem,
+                    matching: .images
+                ) {
+                    Label("Select photo", systemImage: "photo.on.rectangle.angled")
+                        .font(.body.weight(.medium))
+                }
+                .buttonStyle(.borderedProminent)
+                Spacer()
+            }
+            .padding(24)
+            .background(AppColors.background.ignoresSafeArea())
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { viewModel.showChangeCoverSheet = false }
+                        .foregroundStyle(AppColors.primaryText)
+                }
+            }
+        }
+    }
 }
 
 @MainActor
 final class EventDetailViewModel: ObservableObject {
-    let event: Event
+    @Published var event: Event
 
     @Published var isInterested: Bool = false
     @Published var showMoreActions: Bool = false
     @Published var shouldDismiss: Bool = false
+    @Published var showChangeCoverSheet: Bool = false
+    @Published var changeCoverItem: PhotosPickerItem?
 
     @Published var isDeleteErrorPresented: Bool = false
     @Published var deleteErrorMessage: String?
 
     private let eventRepository: any EventRepository
+    private let eventImageUploadService: any EventImageUploadService
+    private let authSession: AuthSessionStore
     private let onDeleted: () -> Void
+    private let onCoverChanged: () -> Void
+
+    var isOwner: Bool { event.ownerID == authSession.userID }
 
     init(
         event: Event,
         eventRepository: any EventRepository,
-        onDeleted: @escaping () -> Void
+        eventImageUploadService: any EventImageUploadService,
+        authSession: AuthSessionStore,
+        onDeleted: @escaping () -> Void,
+        onCoverChanged: @escaping () -> Void
     ) {
         self.event = event
         self.eventRepository = eventRepository
+        self.eventImageUploadService = eventImageUploadService
+        self.authSession = authSession
         self.onDeleted = onDeleted
+        self.onCoverChanged = onCoverChanged
     }
 
     struct OrganizerDisplay: Hashable {
         let name: String
         let initials: String
+        /// When set, show profile image instead of initials avatar.
+        let profileImageURL: String?
     }
 
     var primaryOrganizer: OrganizerDisplay? {
+        // Show current user as organizer when they created the event.
+        if event.ownerID == authSession.userID {
+            let name = authSession.userName ?? "Me"
+            return OrganizerDisplay(
+                name: name,
+                initials: String(name.prefix(2)).uppercased().isEmpty ? "ME" : String(name.prefix(2)).uppercased(),
+                profileImageURL: authSession.profileImageURL
+            )
+        }
         if let first = event.hosts?.first {
             return OrganizerDisplay(
                 name: first.name,
-                initials: String(first.avatarPlaceholder.prefix(2))
+                initials: String(first.avatarPlaceholder.prefix(2)),
+                profileImageURL: nil
             )
         }
-
-        // MVP fallback for events coming from Supabase where we don't yet join host profiles.
-        return OrganizerDisplay(name: "Society", initials: "SO")
+        return OrganizerDisplay(name: "Society", initials: "SO", profileImageURL: nil)
     }
 
     var dateText: String {
@@ -304,11 +377,56 @@ final class EventDetailViewModel: ObservableObject {
     func handleDeleteTap() async {
         do {
             try await eventRepository.deleteEvent(id: event.id)
+            await eventImageUploadService.deleteFromStorageIfOwned(url: event.imageNameOrURL)
             onDeleted()
             shouldDismiss = true
         } catch {
             deleteErrorMessage = error.localizedDescription
             isDeleteErrorPresented = true
+        }
+    }
+
+    func uploadNewCoverAndReplace() async {
+        guard let item = changeCoverItem else { return }
+        guard let imageData = try? await item.loadTransferable(type: Data.self), !imageData.isEmpty else {
+            changeCoverItem = nil
+            return
+        }
+        // Capture old URL first (same pattern as profile: use current value before any update).
+        let oldImageURL = event.imageNameOrURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasOldImageInOurBucket = oldImageURL.contains("event-images") || (oldImageURL.hasPrefix("http") && oldImageURL.contains("event-images"))
+        do {
+            let newURL = try await eventImageUploadService.upload(imageData)
+            let newURLString = newURL.absoluteString
+            // Delete previous cover from storage before updating the event (same order as profile: delete old after upload, so we remove the file we're replacing).
+            if hasOldImageInOurBucket, !oldImageURL.isEmpty {
+                await eventImageUploadService.deleteFromStorageIfOwned(url: oldImageURL)
+            }
+            try await eventRepository.updateEventCover(eventID: event.id, imageURL: newURLString)
+            event = Event(
+                id: event.id,
+                ownerID: event.ownerID,
+                title: event.title,
+                category: event.category,
+                startDate: event.startDate,
+                venueName: event.venueName,
+                neighborhood: event.neighborhood,
+                distanceKm: event.distanceKm,
+                imageNameOrURL: newURLString,
+                isFeatured: event.isFeatured,
+                endDate: event.endDate,
+                addressLine: event.addressLine,
+                coordinate: event.coordinate,
+                hosts: event.hosts,
+                goingCount: event.goingCount,
+                about: event.about
+            )
+            onCoverChanged()
+            showChangeCoverSheet = false
+            changeCoverItem = nil
+        } catch {
+            print("[EventDetail] Change cover failed: \(error)")
+            changeCoverItem = nil
         }
     }
 }
@@ -618,6 +736,7 @@ struct EventAvatar: View {
     EventDetailView(
         event: Event(
             id: UUID(),
+            ownerID: nil,
             title: "Nordic AI Night",
             category: "AI",
             startDate: Date(timeIntervalSinceNow: 60 * 60 * 24),
@@ -636,7 +755,9 @@ struct EventAvatar: View {
             goingCount: 75,
             about: "A relaxed meetup for AI builders in Oslo."
         ),
-        eventRepository: MockEventRepository()
+        eventRepository: MockEventRepository(),
+        eventImageUploadService: MockEventImageUploadService(),
+        authSession: AuthSessionStore(authRepository: PreviewAuthRepository())
     )
-    .environmentObject(AuthSessionStore(authRepository: PreviewAuthRepository()))
 }
+

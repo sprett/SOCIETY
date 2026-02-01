@@ -6,6 +6,7 @@
 //
 
 import Combine
+import CoreLocation
 import SwiftUI
 
 struct DiscoverView: View {
@@ -15,7 +16,9 @@ struct DiscoverView: View {
     @State private var isProfilePresented: Bool = false
     @State private var isMapPresented: Bool = false
     private let eventRepository: any EventRepository
+    private let eventImageUploadService: any EventImageUploadService
     private let profileImageUploadService: any ProfileImageUploadService
+    @ObservedObject private var locationManager: LocationManager
     private let onHostEventTapped: (() -> Void)?
 
     private var isEventDetailPresented: Bool {
@@ -32,13 +35,17 @@ struct DiscoverView: View {
 
     init(
         eventRepository: any EventRepository = MockEventRepository(),
+        eventImageUploadService: any EventImageUploadService = MockEventImageUploadService(),
         profileImageUploadService: any ProfileImageUploadService = MockProfileImageUploadService(),
+        locationManager: LocationManager,
         onHostEventTapped: (() -> Void)? = nil
     ) {
         self.eventRepository = eventRepository
+        self.eventImageUploadService = eventImageUploadService
         self.profileImageUploadService = profileImageUploadService
+        _locationManager = ObservedObject(wrappedValue: locationManager)
         self.onHostEventTapped = onHostEventTapped
-        _viewModel = StateObject(wrappedValue: DiscoverViewModel(repository: eventRepository))
+        _viewModel = StateObject(wrappedValue: DiscoverViewModel(repository: eventRepository, locationManager: locationManager))
     }
 
     var body: some View {
@@ -64,6 +71,8 @@ struct DiscoverView: View {
                     await viewModel.refresh()
                 }
                 .onAppear {
+                    locationManager.requestLocationPermission()
+                    locationManager.getCurrentLocation()
                     Task { await viewModel.refresh() }
                 }
                 .background(AppColors.background.ignoresSafeArea())
@@ -104,7 +113,10 @@ struct DiscoverView: View {
             EventDetailView(
                 event: event,
                 eventRepository: eventRepository,
-                onDeleted: { Task { await viewModel.refresh() } }
+                eventImageUploadService: eventImageUploadService,
+                authSession: authSession,
+                onDeleted: { Task { await viewModel.refresh() } },
+                onCoverChanged: { Task { await viewModel.refresh() } }
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -119,8 +131,12 @@ struct DiscoverView: View {
             .presentationDragIndicator(.visible)
         }
         .fullScreenCover(isPresented: $isMapPresented) {
-            MapView(eventRepository: eventRepository, onDismiss: { isMapPresented = false })
-                .environmentObject(authSession)
+            MapView(
+                eventRepository: eventRepository,
+                eventImageUploadService: eventImageUploadService,
+                onDismiss: { isMapPresented = false }
+            )
+            .environmentObject(authSession)
         }
     }
 
@@ -251,7 +267,8 @@ struct DiscoverView: View {
                         } label: {
                             EventRow(
                                 event: event,
-                                dateText: viewModel.dateText(for: event)
+                                dateText: viewModel.dateText(for: event),
+                                displayDistanceKm: viewModel.distanceFromUser(for: event)
                             )
                         }
                         .buttonStyle(.plain)
@@ -308,9 +325,20 @@ final class DiscoverViewModel: ObservableObject {
     @Published var selectedCategory: String = "All"
 
     private let repository: any EventRepository
+    private let locationManager: LocationManager
 
-    init(repository: any EventRepository) {
+    init(repository: any EventRepository, locationManager: LocationManager) {
         self.repository = repository
+        self.locationManager = locationManager
+    }
+
+    /// Distance in km from the user's current location to the event. Nil if user location or event coordinate is unavailable.
+    func distanceFromUser(for event: Event) -> Double? {
+        guard let userCoord = locationManager.userLocation,
+              let eventCoord = event.coordinate else { return nil }
+        let userLocation = CLLocation(latitude: userCoord.latitude, longitude: userCoord.longitude)
+        let eventLocation = CLLocation(latitude: eventCoord.latitude, longitude: eventCoord.longitude)
+        return eventLocation.distance(from: userLocation) / 1000
     }
 
     /// All categories (same as event create). "All" plus every category, even if empty.
@@ -330,7 +358,16 @@ final class DiscoverViewModel: ObservableObject {
     }
 
     var nearbyEvents: [Event] {
-        filteredEvents.sorted { $0.startDate < $1.startDate }
+        let events = filteredEvents
+        guard let _ = locationManager.userLocation else {
+            return events.sorted { $0.startDate < $1.startDate }
+        }
+        return events.sorted { e1, e2 in
+            let d1 = distanceFromUser(for: e1) ?? .infinity
+            let d2 = distanceFromUser(for: e2) ?? .infinity
+            if d1 != d2 { return d1 < d2 }
+            return e1.startDate < e2.startDate
+        }
     }
 
     func dateText(for event: Event) -> String {
@@ -369,5 +406,5 @@ final class DiscoverViewModel: ObservableObject {
 }
 
 #Preview {
-    DiscoverView()
+    DiscoverView(locationManager: LocationManager())
 }

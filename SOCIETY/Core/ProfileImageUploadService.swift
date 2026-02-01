@@ -48,7 +48,7 @@ final class SupabaseProfileImageUploadService: ProfileImageUploadService {
 
     func deleteFromStorageIfOwned(url: String) async {
         guard let path = pathInBucket(from: url) else { return }
-        try? await client.storage
+        _ = try? await client.storage
             .from(Self.bucketName)
             .remove(paths: [path])
     }

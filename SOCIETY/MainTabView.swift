@@ -22,7 +22,9 @@ struct MainTabView: View {
             // Discover Tab
             DiscoverView(
                 eventRepository: dependencies.eventRepository,
+                eventImageUploadService: dependencies.eventImageUploadService,
                 profileImageUploadService: dependencies.profileImageUploadService,
+                locationManager: dependencies.locationManager,
                 onHostEventTapped: {
                     selectedTab = 1
                     requestCreate = true
@@ -47,7 +49,10 @@ struct MainTabView: View {
             .tag(1)
             
             // Feed Tab
-            FeedView(eventRepository: dependencies.eventRepository)
+            FeedView(
+                eventRepository: dependencies.eventRepository,
+                eventImageUploadService: dependencies.eventImageUploadService
+            )
                 .tabItem {
                     Label("Feed", systemImage: "list.bullet")
                 }

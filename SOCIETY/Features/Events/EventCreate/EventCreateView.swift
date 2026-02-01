@@ -96,7 +96,7 @@ struct EventCreateView: View {
                                 AppColors.surface,
                                 in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-                        if !viewModel.suggestions.isEmpty {
+                        if !viewModel.suggestions.isEmpty, viewModel.addressLine == nil {
                             VStack(spacing: 0) {
                                 ForEach(viewModel.suggestions) { suggestion in
                                     Button {
@@ -173,22 +173,6 @@ struct EventCreateView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Close") { dismiss() }
                     .foregroundStyle(AppColors.primaryText)
-            }
-        }
-        .alert(item: $viewModel.presentedAlert) { alert in
-            switch alert {
-            case .createError(let message):
-                return Alert(
-                    title: Text("Couldn't create event"),
-                    message: Text(message),
-                    dismissButton: .cancel(Text("OK"))
-                )
-            case .imageTooLarge:
-                return Alert(
-                    title: Text("Image too large"),
-                    message: Text("Image must be under 5MB."),
-                    dismissButton: .cancel(Text("OK"))
-                )
             }
         }
         .onChange(of: viewModel.selectedImageItems) { _, _ in
@@ -283,18 +267,6 @@ extension EventCreateView {
     }
 }
 
-enum EventCreateAlert: Identifiable {
-    case createError(String)
-    case imageTooLarge
-
-    var id: String {
-        switch self {
-        case .createError: return "createError"
-        case .imageTooLarge: return "imageTooLarge"
-        }
-    }
-}
-
 @MainActor
 final class EventCreateViewModel: ObservableObject {
     @Published var title: String = ""
@@ -322,7 +294,6 @@ final class EventCreateViewModel: ObservableObject {
     @Published private(set) var coordinate: CLLocationCoordinate2D?
 
     @Published private(set) var isSaving: Bool = false
-    @Published var presentedAlert: EventCreateAlert?
 
     private let eventRepository: any EventRepository
     private let authSession: AuthSessionStore
@@ -402,7 +373,7 @@ final class EventCreateViewModel: ObservableObject {
         if data.count > Self.maxImageBytes {
             selectedImageItems = []
             selectedImageData = nil
-            presentedAlert = .imageTooLarge
+            print("[EventCreate] Image too large (\(data.count) bytes, max \(Self.maxImageBytes))")
             return
         }
         selectedImageData = data
@@ -428,6 +399,7 @@ final class EventCreateViewModel: ObservableObject {
     }
 
     func selectSuggestion(_ suggestion: AddressSuggestion) async {
+        addressSearch.clearSuggestions()
         do {
             let item = try await addressSearch.resolve(suggestion)
 
@@ -502,7 +474,7 @@ final class EventCreateViewModel: ObservableObject {
                 venueName = item.name ?? suggestion.title
             }
         } catch {
-            presentedAlert = .createError(error.localizedDescription)
+            print("[EventCreate] Address selection failed: \(error)")
         }
     }
 
@@ -539,7 +511,7 @@ final class EventCreateViewModel: ObservableObject {
             onCreated()
             dismiss()
         } catch {
-            presentedAlert = .createError(error.localizedDescription)
+            print("[EventCreate] Create event failed: \(error)")
         }
     }
 

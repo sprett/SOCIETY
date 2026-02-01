@@ -24,10 +24,16 @@ struct MapView: View {
     )
 
     private let eventRepository: any EventRepository
+    private let eventImageUploadService: any EventImageUploadService
     private let onDismiss: (() -> Void)?
 
-    init(eventRepository: any EventRepository, onDismiss: (() -> Void)? = nil) {
+    init(
+        eventRepository: any EventRepository,
+        eventImageUploadService: any EventImageUploadService = MockEventImageUploadService(),
+        onDismiss: (() -> Void)? = nil
+    ) {
         self.eventRepository = eventRepository
+        self.eventImageUploadService = eventImageUploadService
         self.onDismiss = onDismiss
         _viewModel = StateObject(wrappedValue: MapViewModel(eventRepository: eventRepository))
     }
@@ -40,7 +46,10 @@ struct MapView: View {
             EventDetailView(
                 event: event,
                 eventRepository: eventRepository,
-                onDeleted: { viewModel.refresh() }
+                eventImageUploadService: eventImageUploadService,
+                authSession: authSession,
+                onDeleted: { viewModel.refresh() },
+                onCoverChanged: { viewModel.refresh() }
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -272,5 +281,9 @@ struct EventMapImageView: View {
 }
 
 #Preview {
-    MapView(eventRepository: MockEventRepository())
+    MapView(
+        eventRepository: MockEventRepository(),
+        eventImageUploadService: MockEventImageUploadService()
+    )
+    .environmentObject(AuthSessionStore(authRepository: PreviewAuthRepository()))
 }

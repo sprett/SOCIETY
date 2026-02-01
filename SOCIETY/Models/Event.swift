@@ -16,6 +16,8 @@ struct Host: Identifiable, Hashable {
 
 struct Event: Identifiable, Hashable {
     let id: UUID
+    /// Supabase auth user ID of the event creator; nil for mock or legacy data.
+    let ownerID: UUID?
     let title: String
     let category: String
     let startDate: Date
@@ -24,7 +26,7 @@ struct Event: Identifiable, Hashable {
     let distanceKm: Double
     let imageNameOrURL: String
     let isFeatured: Bool
-    
+
     // Optional fields for Event Details sheet
     let endDate: Date?
     let addressLine: String?
@@ -32,9 +34,10 @@ struct Event: Identifiable, Hashable {
     let hosts: [Host]?
     let goingCount: Int?
     let about: String?
-    
+
     init(
         id: UUID,
+        ownerID: UUID? = nil,
         title: String,
         category: String,
         startDate: Date,
@@ -51,6 +54,7 @@ struct Event: Identifiable, Hashable {
         about: String? = nil
     ) {
         self.id = id
+        self.ownerID = ownerID
         self.title = title
         self.category = category
         self.startDate = startDate
@@ -66,9 +70,10 @@ struct Event: Identifiable, Hashable {
         self.goingCount = goingCount
         self.about = about
     }
-    
+
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
+        hasher.combine(ownerID)
         hasher.combine(title)
         hasher.combine(category)
         hasher.combine(startDate)
@@ -87,9 +92,10 @@ struct Event: Identifiable, Hashable {
         hasher.combine(goingCount)
         hasher.combine(about)
     }
-    
+
     static func == (lhs: Event, rhs: Event) -> Bool {
         lhs.id == rhs.id &&
+        lhs.ownerID == rhs.ownerID &&
         lhs.title == rhs.title &&
         lhs.category == rhs.category &&
         lhs.startDate == rhs.startDate &&
