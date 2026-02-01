@@ -17,9 +17,26 @@ final class SupabaseEventRepository: EventRepository {
     }
 
     func fetchEvents() async throws -> [Event] {
-        let rows: [EventDBRow] = try await client
+        let rows: [EventDBRow] =
+            try await client
             .from("events")
             .select()
+            .order("start_at", ascending: true)
+            .execute()
+            .value
+
+        return rows.map { $0.toDomain() }
+    }
+
+    func fetchEvents(ids: [UUID]) async throws -> [Event] {
+        guard !ids.isEmpty else { return [] }
+
+        let idStrings = ids.map { $0.uuidString }
+        let rows: [EventDBRow] =
+            try await client
+            .from("events")
+            .select()
+            .in("id", values: idStrings)
             .order("start_at", ascending: true)
             .execute()
             .value
@@ -30,7 +47,8 @@ final class SupabaseEventRepository: EventRepository {
     func createEvent(_ draft: EventDraft) async throws -> Event {
         let insert = EventInsertRow(from: draft)
 
-        let row: EventDBRow = try await client
+        let row: EventDBRow =
+            try await client
             .from("events")
             .insert(insert)
             .select()
@@ -46,7 +64,8 @@ final class SupabaseEventRepository: EventRepository {
             let imageURL: String
             enum CodingKeys: String, CodingKey { case imageURL = "image_url" }
         }
-        _ = try await client
+        _ =
+            try await client
             .from("events")
             .update(UpdateCover(imageURL: imageURL))
             .eq("id", value: eventID.uuidString)
@@ -54,7 +73,8 @@ final class SupabaseEventRepository: EventRepository {
     }
 
     func deleteEvent(id: UUID) async throws {
-        _ = try await client
+        _ =
+            try await client
             .from("events")
             .delete()
             .eq("id", value: id.uuidString)
@@ -175,4 +195,3 @@ private struct EventDBRow: Decodable {
         )
     }
 }
-

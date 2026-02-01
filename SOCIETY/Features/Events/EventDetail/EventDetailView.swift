@@ -18,18 +18,22 @@ struct EventDetailView: View {
         event: Event,
         eventRepository: any EventRepository,
         eventImageUploadService: any EventImageUploadService,
+        rsvpRepository: any RsvpRepository,
         authSession: AuthSessionStore,
         onDeleted: @escaping () -> Void = {},
-        onCoverChanged: @escaping () -> Void = {}
+        onCoverChanged: @escaping () -> Void = {},
+        onRsvpChanged: @escaping () -> Void = {}
     ) {
         _viewModel = StateObject(
             wrappedValue: EventDetailViewModel(
                 event: event,
                 eventRepository: eventRepository,
                 eventImageUploadService: eventImageUploadService,
+                rsvpRepository: rsvpRepository,
                 authSession: authSession,
                 onDeleted: onDeleted,
-                onCoverChanged: onCoverChanged
+                onCoverChanged: onCoverChanged,
+                onRsvpChanged: onRsvpChanged
             )
         )
     }
@@ -85,9 +89,16 @@ struct EventDetailView: View {
                     }
                 }
 
-                if let goingCount = viewModel.event.goingCount {
+                if !viewModel.attendees.isEmpty || viewModel.event.goingCount != nil {
                     EventDetailSection {
-                        EventAttendingSection(goingCount: goingCount)
+                        EventAttendingSection(
+                            attendees: viewModel.attendees,
+                            goingCount: viewModel.attendees.isEmpty
+                                ? viewModel.event.goingCount : nil,
+                            onTap: {
+                                viewModel.showAttendeeList = true
+                            }
+                        )
                     }
                 }
 
@@ -140,12 +151,21 @@ struct EventDetailView: View {
             guard shouldDismiss else { return }
             dismiss()
         }
+        .sheet(isPresented: $viewModel.showAttendeeList) {
+            AttendeeListView(attendees: viewModel.attendees)
+        }
+        .onAppear {
+            Task {
+                await viewModel.fetchAttendees()
+                await viewModel.checkIsAttending()
+            }
+        }
     }
 
     private var hero: some View {
         GeometryReader { geometry in
             let squareSize = geometry.size.width
-            
+
             EventHeroImage(
                 imageNameOrURL: viewModel.event.imageNameOrURL, category: viewModel.event.category
             )
@@ -172,20 +192,40 @@ struct EventDetailView: View {
     private var actionBar: some View {
         HStack(spacing: 12) {
             Button {
-                viewModel.handleRegisterTap()
+                Task {
+                    if viewModel.isAttending {
+                        await viewModel.handleUnregisterTap()
+                    } else {
+                        await viewModel.handleRegisterTap()
+                    }
+                }
             } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: "plus")
+                    Image(systemName: viewModel.isAttending ? "xmark" : "plus")
                         .font(.subheadline.weight(.semibold))
-                    Text("Register")
+                    Text(viewModel.isAttending ? "Unregister" : "Register")
                         .font(.subheadline.weight(.semibold))
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.black)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .foregroundStyle(viewModel.isAttending ? AppColors.primaryText : .black)
+            .background {
+                if viewModel.isAttending {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                } else {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white)
+                }
+            }
+            .overlay {
+                if viewModel.isAttending {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
+                }
+            }
 
             Button {
                 viewModel.handleContactTap()
@@ -288,11 +328,17 @@ final class EventDetailViewModel: ObservableObject {
     @Published var isDeleteErrorPresented: Bool = false
     @Published var deleteErrorMessage: String?
 
+    @Published var attendees: [Attendee] = []
+    @Published var isAttending: Bool = false
+    @Published var showAttendeeList: Bool = false
+
     private let eventRepository: any EventRepository
     private let eventImageUploadService: any EventImageUploadService
+    private let rsvpRepository: any RsvpRepository
     private let authSession: AuthSessionStore
     private let onDeleted: () -> Void
     private let onCoverChanged: () -> Void
+    private let onRsvpChanged: () -> Void
 
     var isOwner: Bool { event.ownerID == authSession.userID }
 
@@ -300,16 +346,20 @@ final class EventDetailViewModel: ObservableObject {
         event: Event,
         eventRepository: any EventRepository,
         eventImageUploadService: any EventImageUploadService,
+        rsvpRepository: any RsvpRepository,
         authSession: AuthSessionStore,
         onDeleted: @escaping () -> Void,
-        onCoverChanged: @escaping () -> Void
+        onCoverChanged: @escaping () -> Void,
+        onRsvpChanged: @escaping () -> Void
     ) {
         self.event = event
         self.eventRepository = eventRepository
         self.eventImageUploadService = eventImageUploadService
+        self.rsvpRepository = rsvpRepository
         self.authSession = authSession
         self.onDeleted = onDeleted
         self.onCoverChanged = onCoverChanged
+        self.onRsvpChanged = onRsvpChanged
     }
 
     struct OrganizerDisplay: Hashable {
@@ -325,7 +375,8 @@ final class EventDetailViewModel: ObservableObject {
             let name = authSession.userName ?? "Me"
             return OrganizerDisplay(
                 name: name,
-                initials: String(name.prefix(2)).uppercased().isEmpty ? "ME" : String(name.prefix(2)).uppercased(),
+                initials: String(name.prefix(2)).uppercased().isEmpty
+                    ? "ME" : String(name.prefix(2)).uppercased(),
                 profileImageURL: authSession.profileImageURL
             )
         }
@@ -346,8 +397,79 @@ final class EventDetailViewModel: ObservableObject {
         return EventDateFormatter.dateOnly(event.startDate)
     }
 
-    func handleRegisterTap() {
-        print("Register tapped")
+    func fetchAttendees() async {
+        do {
+            attendees = try await rsvpRepository.fetchAttendees(eventId: event.id)
+            // Update event with current going count
+            if !attendees.isEmpty {
+                event = Event(
+                    id: event.id,
+                    ownerID: event.ownerID,
+                    title: event.title,
+                    category: event.category,
+                    startDate: event.startDate,
+                    venueName: event.venueName,
+                    neighborhood: event.neighborhood,
+                    distanceKm: event.distanceKm,
+                    imageNameOrURL: event.imageNameOrURL,
+                    isFeatured: event.isFeatured,
+                    endDate: event.endDate,
+                    addressLine: event.addressLine,
+                    coordinate: event.coordinate,
+                    hosts: event.hosts,
+                    goingCount: attendees.count,
+                    about: event.about
+                )
+            }
+        } catch {
+            print("[EventDetail] Failed to fetch attendees: \(error)")
+            attendees = []
+        }
+    }
+
+    func checkIsAttending() async {
+        guard let userID = authSession.userID else {
+            isAttending = false
+            return
+        }
+        do {
+            isAttending = try await rsvpRepository.isAttending(eventId: event.id, userId: userID)
+        } catch {
+            print("[EventDetail] Failed to check attending status: \(error)")
+            isAttending = false
+        }
+    }
+
+    func handleRegisterTap() async {
+        guard let userID = authSession.userID else {
+            // Show sign-in prompt or alert
+            print("[EventDetail] User not signed in")
+            return
+        }
+
+        do {
+            try await rsvpRepository.addRsvp(eventId: event.id, userId: userID)
+            isAttending = true
+            await fetchAttendees()
+            onRsvpChanged()
+        } catch {
+            print("[EventDetail] Failed to add RSVP: \(error)")
+        }
+    }
+
+    func handleUnregisterTap() async {
+        guard let userID = authSession.userID else {
+            return
+        }
+
+        do {
+            try await rsvpRepository.removeRsvp(eventId: event.id, userId: userID)
+            isAttending = false
+            await fetchAttendees()
+            onRsvpChanged()
+        } catch {
+            print("[EventDetail] Failed to remove RSVP: \(error)")
+        }
     }
 
     func handleContactTap() {
@@ -388,13 +510,16 @@ final class EventDetailViewModel: ObservableObject {
 
     func uploadNewCoverAndReplace() async {
         guard let item = changeCoverItem else { return }
-        guard let imageData = try? await item.loadTransferable(type: Data.self), !imageData.isEmpty else {
+        guard let imageData = try? await item.loadTransferable(type: Data.self), !imageData.isEmpty
+        else {
             changeCoverItem = nil
             return
         }
         // Capture old URL first (same pattern as profile: use current value before any update).
         let oldImageURL = event.imageNameOrURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasOldImageInOurBucket = oldImageURL.contains("event-images") || (oldImageURL.hasPrefix("http") && oldImageURL.contains("event-images"))
+        let hasOldImageInOurBucket =
+            oldImageURL.contains("event-images")
+            || (oldImageURL.hasPrefix("http") && oldImageURL.contains("event-images"))
         do {
             let newURL = try await eventImageUploadService.upload(imageData)
             let newURLString = newURL.absoluteString
@@ -541,30 +666,136 @@ struct HostRow: View {
 }
 
 struct EventAttendingSection: View {
-    let goingCount: Int
+    let attendees: [Attendee]
+    let goingCount: Int?
+    let onTap: () -> Void
+
+    private var displayCount: Int {
+        if !attendees.isEmpty {
+            return attendees.count
+        }
+        return goingCount ?? 0
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            EventDetailSectionHeader(title: "Attending")
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 8) {
+                EventDetailSectionHeader(title: "Attending")
 
-            Text("\(goingCount) going")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppColors.primaryText)
+                Text("\(displayCount) going")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppColors.primaryText)
 
-            HStack(spacing: -8) {
-                ForEach(0..<min(3, goingCount), id: \.self) { _ in
-                    Circle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 28, height: 28)
-                        .overlay(
-                            Image(systemName: "person.fill")
-                                .font(.caption)
-                                .foregroundStyle(AppColors.tertiaryText)
-                        )
-                        .overlay(
+                if !attendees.isEmpty {
+                    HStack(spacing: -8) {
+                        ForEach(Array(attendees.prefix(5).enumerated()), id: \.element.id) {
+                            index, attendee in
+                            if let avatarURL = attendee.avatarURL {
+                                UserAvatarView(imageURL: avatarURL, size: 28)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white, lineWidth: 1)
+                                    )
+                            } else {
+                                Circle()
+                                    .fill(Color.gray.opacity(0.3))
+                                    .frame(width: 28, height: 28)
+                                    .overlay(
+                                        Text(attendee.name?.prefix(2).uppercased() ?? "?")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(AppColors.tertiaryText)
+                                    )
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white, lineWidth: 1)
+                                    )
+                            }
+                        }
+                    }
+                } else if displayCount > 0 {
+                    HStack(spacing: -8) {
+                        ForEach(0..<min(3, displayCount), id: \.self) { _ in
                             Circle()
-                                .stroke(Color.white, lineWidth: 1)
-                        )
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 28, height: 28)
+                                .overlay(
+                                    Image(systemName: "person.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(AppColors.tertiaryText)
+                                )
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white, lineWidth: 1)
+                                )
+                        }
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct AttendeeListView: View {
+    let attendees: [Attendee]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                if attendees.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "person.3")
+                            .font(.system(size: 48))
+                            .foregroundStyle(AppColors.secondaryText)
+                        Text("No attendees yet")
+                            .font(.headline)
+                            .foregroundStyle(AppColors.primaryText)
+                        Text("Be the first to register!")
+                            .font(.subheadline)
+                            .foregroundStyle(AppColors.secondaryText)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding()
+                } else {
+                    LazyVStack(spacing: 12) {
+                        ForEach(attendees) { attendee in
+                            HStack(spacing: 12) {
+                                if let avatarURL = attendee.avatarURL {
+                                    UserAvatarView(imageURL: avatarURL, size: 44)
+                                } else {
+                                    Circle()
+                                        .fill(AppColors.surface)
+                                        .frame(width: 44, height: 44)
+                                        .overlay(
+                                            Text(attendee.name?.prefix(2).uppercased() ?? "?")
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(AppColors.secondaryText)
+                                        )
+                                }
+
+                                Text(attendee.name ?? "Someone")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(AppColors.primaryText)
+
+                                Spacer()
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+            .background(AppColors.background.ignoresSafeArea())
+            .navigationTitle("Attendees")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundStyle(AppColors.primaryText)
                 }
             }
         }
@@ -733,31 +964,31 @@ struct EventAvatar: View {
 }
 
 #Preview {
-    EventDetailView(
-        event: Event(
-            id: UUID(),
-            ownerID: nil,
-            title: "Nordic AI Night",
-            category: "AI",
-            startDate: Date(timeIntervalSinceNow: 60 * 60 * 24),
-            venueName: "Mesh Oslo",
-            neighborhood: "Sentrum",
-            distanceKm: 1.2,
-            imageNameOrURL:
-                "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?q=80&w=2000&auto=format&fit=crop",
-            isFeatured: true,
-            endDate: Date(timeIntervalSinceNow: 60 * 60 * 24 + 60 * 60 * 2),
-            addressLine: "Tordenskiolds gate 2, 0160 Oslo, Norway",
-            coordinate: CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7461),
-            hosts: [
-                Host(id: UUID(), name: "Candyce Costa", avatarPlaceholder: "CC")
-            ],
-            goingCount: 75,
-            about: "A relaxed meetup for AI builders in Oslo."
-        ),
+    let previewEvent = Event(
+        id: UUID(),
+        ownerID: nil,
+        title: "Nordic AI Night",
+        category: "AI",
+        startDate: Date(timeIntervalSinceNow: 60 * 60 * 24),
+        venueName: "Mesh Oslo",
+        neighborhood: "Sentrum",
+        distanceKm: 1.2,
+        imageNameOrURL:
+            "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?q=80&w=2000&auto=format&fit=crop",
+        isFeatured: true,
+        endDate: Date(timeIntervalSinceNow: 60 * 60 * 24 + 60 * 60 * 2),
+        addressLine: "Tordenskiolds gate 2, 0160 Oslo, Norway",
+        coordinate: CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7461),
+        hosts: [Host(id: UUID(), name: "Candyce Costa", avatarPlaceholder: "CC")],
+        goingCount: 75,
+        about: "A relaxed meetup for AI builders in Oslo."
+    )
+
+    return EventDetailView(
+        event: previewEvent,
         eventRepository: MockEventRepository(),
         eventImageUploadService: MockEventImageUploadService(),
+        rsvpRepository: MockRsvpRepository(),
         authSession: AuthSessionStore(authRepository: PreviewAuthRepository())
     )
 }
-

@@ -22,6 +22,7 @@ struct MainTabView: View {
             // Discover Tab
             DiscoverView(
                 eventRepository: dependencies.eventRepository,
+                rsvpRepository: dependencies.rsvpRepository,
                 eventImageUploadService: dependencies.eventImageUploadService,
                 profileImageUploadService: dependencies.profileImageUploadService,
                 locationManager: dependencies.locationManager,
@@ -41,22 +42,27 @@ struct MainTabView: View {
                 authRepository: dependencies.authRepository,
                 eventImageUploadService: dependencies.eventImageUploadService,
                 profileImageUploadService: dependencies.profileImageUploadService,
+                rsvpRepository: dependencies.rsvpRepository,
+                locationManager: dependencies.locationManager,
                 requestCreate: $requestCreate
             )
             .tabItem {
                 Label("Home", systemImage: "house.fill")
             }
             .tag(1)
-            
+
             // Feed Tab
             FeedView(
                 eventRepository: dependencies.eventRepository,
-                eventImageUploadService: dependencies.eventImageUploadService
+                rsvpRepository: dependencies.rsvpRepository,
+                eventImageUploadService: dependencies.eventImageUploadService,
+                profileImageUploadService: dependencies.profileImageUploadService,
+                onDiscoverTapped: { selectedTab = 0 }
             )
-                .tabItem {
-                    Label("Feed", systemImage: "list.bullet")
-                }
-                .tag(2)
+            .tabItem {
+                Label("Feed", systemImage: "list.bullet")
+            }
+            .tag(2)
         }
         .onChange(of: selectedTab) { _, _ in
             let generator = UISelectionFeedbackGenerator()

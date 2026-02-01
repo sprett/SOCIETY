@@ -9,11 +9,13 @@ import CoreLocation
 import Foundation
 
 final class MockEventRepository: EventRepository {
+    private var allEvents: [Event] = []
+
     func fetchEvents() async throws -> [Event] {
         let calendar = Calendar.current
         let now = Date()
 
-        return [
+        let events = [
             Event(
                 id: UUID(),
                 ownerID: nil,
@@ -317,6 +319,14 @@ final class MockEventRepository: EventRepository {
                     "Start the day with a gentle guided meditation in the park. Bring a mat or a jacket to sit on."
             ),
         ]
+
+        allEvents = events
+        return events
+    }
+
+    func fetchEvents(ids: [UUID]) async throws -> [Event] {
+        let all = try await fetchEvents()
+        return all.filter { ids.contains($0.id) }
     }
 
     func createEvent(_ draft: EventDraft) async throws -> Event {

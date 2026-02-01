@@ -17,6 +17,8 @@ struct EventListView: View {
     private let authRepository: any AuthRepository
     private let eventImageUploadService: any EventImageUploadService
     private let profileImageUploadService: any ProfileImageUploadService
+    private let rsvpRepository: any RsvpRepository
+    @ObservedObject private var locationManager: LocationManager
 
     @State private var selectedEvent: Event?
     @State private var isCreatePresented: Bool = false
@@ -28,14 +30,27 @@ struct EventListView: View {
         authRepository: any AuthRepository = PreviewAuthRepository(),
         eventImageUploadService: any EventImageUploadService = MockEventImageUploadService(),
         profileImageUploadService: any ProfileImageUploadService = MockProfileImageUploadService(),
+        rsvpRepository: any RsvpRepository = MockRsvpRepository(),
+        locationManager: LocationManager,
         requestCreate: Binding<Bool> = .constant(false)
     ) {
         self.eventRepository = eventRepository
         self.authRepository = authRepository
         self.eventImageUploadService = eventImageUploadService
         self.profileImageUploadService = profileImageUploadService
+        self.rsvpRepository = rsvpRepository
+        _locationManager = ObservedObject(wrappedValue: locationManager)
         _requestCreate = requestCreate
-        _viewModel = StateObject(wrappedValue: EventListViewModel(repository: eventRepository))
+        // Note: userID will be set via onChange of authSession.userID
+        // We can't access authSession here in init, so start with nil
+        _viewModel = StateObject(
+            wrappedValue: EventListViewModel(
+                repository: eventRepository,
+                rsvpRepository: rsvpRepository,
+                locationManager: locationManager,
+                userID: nil
+            )
+        )
     }
 
     private var isEventDetailPresented: Bool {
@@ -69,6 +84,15 @@ struct EventListView: View {
                 }
                 .background(AppColors.background.ignoresSafeArea())
                 .onAppear {
+                    // Set initial userID and refresh
+                    locationManager.requestLocationPermission()
+                    locationManager.getCurrentLocation()
+                    viewModel.updateUserID(authSession.userID)
+                    viewModel.refresh()
+                }
+                .onChange(of: authSession.userID) { _, _ in
+                    // Update ViewModel with current userID when auth state changes
+                    viewModel.updateUserID(authSession.userID)
                     viewModel.refresh()
                 }
 
@@ -95,9 +119,11 @@ struct EventListView: View {
                 event: event,
                 eventRepository: eventRepository,
                 eventImageUploadService: eventImageUploadService,
+                rsvpRepository: rsvpRepository,
                 authSession: authSession,
                 onDeleted: { viewModel.refresh() },
-                onCoverChanged: { viewModel.refresh() }
+                onCoverChanged: { viewModel.refresh() },
+                onRsvpChanged: { viewModel.refresh() }
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -113,10 +139,11 @@ struct EventListView: View {
             .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isProfilePresented) {
-            ProfileView(
+            SettingsView(
                 authSession: authSession,
                 profileImageUploadService: profileImageUploadService
             )
+            .environmentObject(authSession)
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
@@ -196,9 +223,15 @@ struct EventListView: View {
                 }
                 .padding(.horizontal, -20)
             } else {
-                Text("No upcoming events yet.")
-                    .font(.subheadline)
-                    .foregroundStyle(AppColors.secondaryText)
+                if authSession.userID == nil {
+                    Text("Sign in to see events you're attending.")
+                        .font(.subheadline)
+                        .foregroundStyle(AppColors.secondaryText)
+                } else {
+                    Text("No upcoming events yet.")
+                        .font(.subheadline)
+                        .foregroundStyle(AppColors.secondaryText)
+                }
             }
         }
     }
@@ -209,17 +242,28 @@ struct EventListView: View {
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(AppColors.primaryText)
 
-            LazyVStack(spacing: 12) {
-                ForEach(viewModel.events) { event in
-                    Button {
-                        selectedEvent = event
-                    } label: {
-                        EventRow(
-                            event: event,
-                            dateText: viewModel.dateText(for: event)
-                        )
+            if authSession.userID == nil {
+                Text("Sign in to see events you're attending.")
+                    .font(.subheadline)
+                    .foregroundStyle(AppColors.secondaryText)
+            } else if viewModel.events.isEmpty {
+                Text("You haven't registered for any events yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(AppColors.secondaryText)
+            } else {
+                LazyVStack(spacing: 12) {
+                    ForEach(viewModel.events) { event in
+                        Button {
+                            selectedEvent = event
+                        } label: {
+                            EventRow(
+                                event: event,
+                                dateText: viewModel.dateText(for: event),
+                                displayDistanceKm: viewModel.distanceFromUser(for: event)
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -227,6 +271,6 @@ struct EventListView: View {
 }
 
 #Preview {
-    EventListView()
+    EventListView(locationManager: LocationManager())
         .environmentObject(AuthSessionStore(authRepository: PreviewAuthRepository()))
 }

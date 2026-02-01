@@ -30,11 +30,9 @@ final class FeedViewModel: ObservableObject {
         return EventDateFormatter.dateOnly(event.startDate)
     }
 
+    /// Feed shows events from friends and followed organizers (not implemented yet).
+    /// Until then, keep feed empty.
     func refresh() async {
-        do {
-            events = try await repository.fetchEvents()
-        } catch {
-            events = []
-        }
+        events = []
     }
 }

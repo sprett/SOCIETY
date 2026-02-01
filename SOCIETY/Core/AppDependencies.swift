@@ -12,6 +12,7 @@ struct AppDependencies {
     let supabase: SupabaseClient
     let authRepository: any AuthRepository
     let eventRepository: any EventRepository
+    let rsvpRepository: any RsvpRepository
     let eventImageUploadService: any EventImageUploadService
     let profileImageUploadService: any ProfileImageUploadService
     let locationManager: LocationManager
@@ -28,6 +29,7 @@ extension AppDependencies {
             supabase: supabase,
             authRepository: PreviewAuthRepository(),
             eventRepository: MockEventRepository(),
+            rsvpRepository: MockRsvpRepository(),
             eventImageUploadService: MockEventImageUploadService(),
             profileImageUploadService: MockProfileImageUploadService(),
             locationManager: LocationManager()

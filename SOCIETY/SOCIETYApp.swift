@@ -36,6 +36,7 @@ struct SOCIETYApp: App {
                 supabase: supabase,
                 authRepository: authRepository,
                 eventRepository: SupabaseEventRepository(client: supabase),
+                rsvpRepository: SupabaseRsvpRepository(client: supabase),
                 eventImageUploadService: SupabaseEventImageUploadService(client: supabase),
                 profileImageUploadService: SupabaseProfileImageUploadService(client: supabase),
                 locationManager: LocationManager()

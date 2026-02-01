@@ -47,9 +47,11 @@ struct MapView: View {
                 event: event,
                 eventRepository: eventRepository,
                 eventImageUploadService: eventImageUploadService,
+                rsvpRepository: MockRsvpRepository(),
                 authSession: authSession,
                 onDeleted: { viewModel.refresh() },
-                onCoverChanged: { viewModel.refresh() }
+                onCoverChanged: { viewModel.refresh() },
+                onRsvpChanged: {}
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)

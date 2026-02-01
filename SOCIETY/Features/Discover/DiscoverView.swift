@@ -16,6 +16,7 @@ struct DiscoverView: View {
     @State private var isProfilePresented: Bool = false
     @State private var isMapPresented: Bool = false
     private let eventRepository: any EventRepository
+    private let rsvpRepository: any RsvpRepository
     private let eventImageUploadService: any EventImageUploadService
     private let profileImageUploadService: any ProfileImageUploadService
     @ObservedObject private var locationManager: LocationManager
@@ -35,17 +36,21 @@ struct DiscoverView: View {
 
     init(
         eventRepository: any EventRepository = MockEventRepository(),
+        rsvpRepository: any RsvpRepository = MockRsvpRepository(),
         eventImageUploadService: any EventImageUploadService = MockEventImageUploadService(),
         profileImageUploadService: any ProfileImageUploadService = MockProfileImageUploadService(),
         locationManager: LocationManager,
         onHostEventTapped: (() -> Void)? = nil
     ) {
         self.eventRepository = eventRepository
+        self.rsvpRepository = rsvpRepository
         self.eventImageUploadService = eventImageUploadService
         self.profileImageUploadService = profileImageUploadService
         _locationManager = ObservedObject(wrappedValue: locationManager)
         self.onHostEventTapped = onHostEventTapped
-        _viewModel = StateObject(wrappedValue: DiscoverViewModel(repository: eventRepository, locationManager: locationManager))
+        _viewModel = StateObject(
+            wrappedValue: DiscoverViewModel(
+                repository: eventRepository, locationManager: locationManager))
     }
 
     var body: some View {
@@ -114,9 +119,11 @@ struct DiscoverView: View {
                 event: event,
                 eventRepository: eventRepository,
                 eventImageUploadService: eventImageUploadService,
+                rsvpRepository: rsvpRepository,
                 authSession: authSession,
                 onDeleted: { Task { await viewModel.refresh() } },
-                onCoverChanged: { Task { await viewModel.refresh() } }
+                onCoverChanged: { Task { await viewModel.refresh() } },
+                onRsvpChanged: {}
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -261,17 +268,30 @@ struct DiscoverView: View {
                 categoryEmptyState
             } else {
                 LazyVStack(spacing: 12) {
-                    ForEach(viewModel.nearbyEvents) { event in
-                        Button {
-                            selectedEvent = event
-                        } label: {
-                            EventRow(
-                                event: event,
-                                dateText: viewModel.dateText(for: event),
-                                displayDistanceKm: viewModel.distanceFromUser(for: event)
-                            )
+                    ForEach(viewModel.nearbyEventsGroupedByDate(), id: \.date) { group in
+                        // Date divider
+                        HStack {
+                            Text(viewModel.dateHeaderText(for: group.date))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AppColors.secondaryText)
+                            Spacer()
                         }
-                        .buttonStyle(.plain)
+                        .padding(.top, 8)
+                        .padding(.bottom, 4)
+
+                        // Events for this date
+                        ForEach(group.events) { event in
+                            Button {
+                                selectedEvent = event
+                            } label: {
+                                EventRow(
+                                    event: event,
+                                    dateText: viewModel.dateText(for: event),
+                                    displayDistanceKm: viewModel.distanceFromUser(for: event)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
             }
@@ -335,9 +355,11 @@ final class DiscoverViewModel: ObservableObject {
     /// Distance in km from the user's current location to the event. Nil if user location or event coordinate is unavailable.
     func distanceFromUser(for event: Event) -> Double? {
         guard let userCoord = locationManager.userLocation,
-              let eventCoord = event.coordinate else { return nil }
+            let eventCoord = event.coordinate
+        else { return nil }
         let userLocation = CLLocation(latitude: userCoord.latitude, longitude: userCoord.longitude)
-        let eventLocation = CLLocation(latitude: eventCoord.latitude, longitude: eventCoord.longitude)
+        let eventLocation = CLLocation(
+            latitude: eventCoord.latitude, longitude: eventCoord.longitude)
         return eventLocation.distance(from: userLocation) / 1000
     }
 
@@ -359,15 +381,46 @@ final class DiscoverViewModel: ObservableObject {
 
     var nearbyEvents: [Event] {
         let events = filteredEvents
-        guard let _ = locationManager.userLocation else {
+        guard locationManager.userLocation != nil else {
             return events.sorted { $0.startDate < $1.startDate }
         }
+        // Sort by date first, then by distance for events on the same date
         return events.sorted { e1, e2 in
+            // Compare dates (ignoring time)
+            let calendar = Calendar.current
+            let date1 = calendar.startOfDay(for: e1.startDate)
+            let date2 = calendar.startOfDay(for: e2.startDate)
+
+            if date1 != date2 {
+                return date1 < date2
+            }
+
+            // Same date: sort by distance
             let d1 = distanceFromUser(for: e1) ?? .infinity
             let d2 = distanceFromUser(for: e2) ?? .infinity
-            if d1 != d2 { return d1 < d2 }
-            return e1.startDate < e2.startDate
+            return d1 < d2
         }
+    }
+
+    func nearbyEventsGroupedByDate() -> [(date: Date, events: [Event])] {
+        let sorted = nearbyEvents
+        let calendar = Calendar.current
+
+        // Group events by date
+        let grouped = Dictionary(grouping: sorted) { event in
+            calendar.startOfDay(for: event.startDate)
+        }
+
+        // Convert to array of tuples and sort by date
+        return grouped.map { (date: $0.key, events: $0.value) }
+            .sorted { $0.date < $1.date }
+    }
+
+    func dateHeaderText(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.dateFormat = "d. MMMM"
+        return formatter.string(from: date)
     }
 
     func dateText(for event: Event) -> String {
