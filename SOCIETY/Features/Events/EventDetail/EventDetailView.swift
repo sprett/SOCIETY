@@ -103,10 +103,8 @@ struct EventDetailView: View {
         ) {
             Button("Share") { viewModel.handleShareTap() }
             Button("Copy link") { viewModel.handleCopyLinkTap() }
-            if authSession.isAuthenticated || isDevAuthBypassEnabled {
-                Button("Delete event", role: .destructive) {
-                    Task { await viewModel.handleDeleteTap() }
-                }
+            Button("Delete event", role: .destructive) {
+                Task { await viewModel.handleDeleteTap() }
             }
             Button("Report event", role: .destructive) { viewModel.handleReportTap() }
             Button("Cancel", role: .cancel) {}
@@ -120,14 +118,6 @@ struct EventDetailView: View {
             guard shouldDismiss else { return }
             dismiss()
         }
-    }
-
-    private var isDevAuthBypassEnabled: Bool {
-#if DEBUG
-        return true
-#else
-        return false
-#endif
     }
 
     private var hero: some View {

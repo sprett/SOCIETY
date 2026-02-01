@@ -6,54 +6,56 @@
 //
 
 import SwiftUI
-import UIKit
 
 struct MainTabView: View {
     @State private var selectedTab = 0
+    @State private var requestCreate = false
     private let dependencies: AppDependencies
-    
+
     init(dependencies: AppDependencies = .preview()) {
         self.dependencies = dependencies
-
-        // Configure tab bar appearance to remove white background section
-        let appearance = UITabBarAppearance()
-        appearance.configureWithTransparentBackground()
-        // Use a subtle background with blur for better visibility
-        appearance.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.8)
-        
-        UITabBar.appearance().standardAppearance = appearance
-        if #available(iOS 15.0, *) {
-            UITabBar.appearance().scrollEdgeAppearance = appearance
-        }
     }
-    
+
     var body: some View {
         TabView(selection: $selectedTab) {
-            
+
             // Discover Tab
-            DiscoverView(eventRepository: dependencies.eventRepository)
-                .tabItem {
-                    Label("Discover", systemImage: "magnifyingglass")
+            DiscoverView(
+                eventRepository: dependencies.eventRepository,
+                profileImageUploadService: dependencies.profileImageUploadService,
+                onHostEventTapped: {
+                    selectedTab = 1
+                    requestCreate = true
                 }
-                .tag(0)
-            
+            )
+            .tabItem {
+                Label("Discover", systemImage: "magnifyingglass")
+            }
+            .tag(0)
+
             // Home Tab
             EventListView(
                 eventRepository: dependencies.eventRepository,
                 authRepository: dependencies.authRepository,
-                eventImageUploadService: dependencies.eventImageUploadService
+                eventImageUploadService: dependencies.eventImageUploadService,
+                profileImageUploadService: dependencies.profileImageUploadService,
+                requestCreate: $requestCreate
             )
-                .tabItem {
-                    Label("Home", systemImage: "house.fill")
-                }
-                .tag(1)
+            .tabItem {
+                Label("Home", systemImage: "house.fill")
+            }
+            .tag(1)
             
             // Map Tab
-            MapView()
+            MapView(eventRepository: dependencies.eventRepository)
                 .tabItem {
                     Label("Map", systemImage: "map.fill")
                 }
                 .tag(2)
+        }
+        .onChange(of: selectedTab) { _, _ in
+            let generator = UISelectionFeedbackGenerator()
+            generator.selectionChanged()
         }
     }
 }

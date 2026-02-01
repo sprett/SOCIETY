@@ -17,7 +17,6 @@ final class EventListViewModel: ObservableObject {
 
     init(repository: any EventRepository) {
         self.repository = repository
-        Task { await loadEvents() }
     }
 
     private func loadEvents() async {

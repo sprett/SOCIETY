@@ -10,8 +10,12 @@ import SwiftUI
 
 struct DiscoverView: View {
     @StateObject private var viewModel: DiscoverViewModel
+    @EnvironmentObject private var authSession: AuthSessionStore
     @State private var selectedEvent: Event?
+    @State private var isProfilePresented: Bool = false
     private let eventRepository: any EventRepository
+    private let profileImageUploadService: any ProfileImageUploadService
+    private let onHostEventTapped: (() -> Void)?
 
     private var isEventDetailPresented: Bool {
         selectedEvent != nil
@@ -25,8 +29,14 @@ struct DiscoverView: View {
         isEventDetailPresented ? 0.12 : 0
     }
 
-    init(eventRepository: any EventRepository = MockEventRepository()) {
+    init(
+        eventRepository: any EventRepository = MockEventRepository(),
+        profileImageUploadService: any ProfileImageUploadService = MockProfileImageUploadService(),
+        onHostEventTapped: (() -> Void)? = nil
+    ) {
         self.eventRepository = eventRepository
+        self.profileImageUploadService = profileImageUploadService
+        self.onHostEventTapped = onHostEventTapped
         _viewModel = StateObject(wrappedValue: DiscoverViewModel(repository: eventRepository))
     }
 
@@ -51,6 +61,9 @@ struct DiscoverView: View {
                 }
                 .refreshable {
                     await viewModel.refresh()
+                }
+                .onAppear {
+                    Task { await viewModel.refresh() }
                 }
                 .background(AppColors.background.ignoresSafeArea())
 
@@ -95,6 +108,15 @@ struct DiscoverView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $isProfilePresented) {
+            SettingsView(
+                authSession: authSession,
+                profileImageUploadService: profileImageUploadService
+            )
+            .environmentObject(authSession)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     @ViewBuilder
@@ -111,48 +133,12 @@ struct DiscoverView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            AsyncImage(
-                url: URL(
-                    string:
-                        "https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?q=80&w=2034&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-                )
-            ) { phase in
-                switch phase {
-                case .empty:
-                    Circle()
-                        .fill(AppColors.surface)
-                        .frame(width: 44, height: 44)
-                        .overlay {
-                            Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundStyle(AppColors.secondaryText)
-                        }
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 44, height: 44)
-                        .clipShape(Circle())
-                case .failure:
-                    Circle()
-                        .fill(AppColors.surface)
-                        .frame(width: 44, height: 44)
-                        .overlay {
-                            Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundStyle(AppColors.secondaryText)
-                        }
-                @unknown default:
-                    Circle()
-                        .fill(AppColors.surface)
-                        .frame(width: 44, height: 44)
-                        .overlay {
-                            Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundStyle(AppColors.secondaryText)
-                        }
-                }
+            Button {
+                isProfilePresented = true
+            } label: {
+                UserAvatarView(imageURL: authSession.profileImageURL, size: 44)
             }
+            .buttonStyle(.plain)
 
             Text("Discover")
                 .font(.largeTitle.weight(.bold))
@@ -250,21 +236,58 @@ struct DiscoverView: View {
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(AppColors.primaryText)
 
-            LazyVStack(spacing: 12) {
-                ForEach(viewModel.nearbyEvents) { event in
-                    Button {
-                        selectedEvent = event
-                    } label: {
-                        EventRow(
-                            event: event,
-                            dateText: viewModel.dateText(for: event)
-                        )
+            if viewModel.isSelectedCategoryEmpty {
+                categoryEmptyState
+            } else {
+                LazyVStack(spacing: 12) {
+                    ForEach(viewModel.nearbyEvents) { event in
+                        Button {
+                            selectedEvent = event
+                        } label: {
+                            EventRow(
+                                event: event,
+                                dateText: viewModel.dateText(for: event)
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.selectedCategory)
+    }
+
+    private var categoryEmptyState: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "calendar.badge.plus")
+                .font(.system(size: 48))
+                .foregroundStyle(AppColors.secondaryText)
+
+            Text("No \(viewModel.selectedCategory) events yet")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppColors.primaryText)
+                .multilineTextAlignment(.center)
+
+            Text("Be the first to host something for your community.")
+                .font(.subheadline)
+                .foregroundStyle(AppColors.secondaryText)
+                .multilineTextAlignment(.center)
+
+            if let onHost = onHostEventTapped {
+                Button {
+                    onHost()
+                } label: {
+                    Label("Host an event", systemImage: "plus.circle.fill")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppColors.accent)
+                .padding(.top, 8)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+        .padding(.horizontal, 24)
     }
 }
 
@@ -283,16 +306,18 @@ final class DiscoverViewModel: ObservableObject {
 
     init(repository: any EventRepository) {
         self.repository = repository
-        Task { await loadEvents() }
     }
 
+    /// All categories (same as event create). "All" plus every category, even if empty.
     var categoryOptions: [CategoryOption] {
-        let eventCategories = Set(events.map { $0.category })
-        let orderedCategories = categoryOrder.filter { eventCategories.contains($0) }
-        let options = orderedCategories.map { category in
-            CategoryOption(title: category, systemImageName: categoryIcons[category] ?? "sparkles")
+        let options = EventCategories.all.map { category in
+            CategoryOption(title: category, systemImageName: EventCategories.icon(for: category))
         }
         return [CategoryOption(title: "All", systemImageName: "sparkles")] + options
+    }
+
+    var isSelectedCategoryEmpty: Bool {
+        selectedCategory != "All" && filteredEvents.isEmpty
     }
 
     var featuredEvents: [Event] {
@@ -340,25 +365,6 @@ final class DiscoverViewModel: ObservableObject {
         return formatter
     }()
 
-    private let categoryOrder: [String] = [
-        "Tech",
-        "AI",
-        "Climate",
-        "Fitness",
-        "Food & Drink",
-        "Arts & Culture",
-        "Wellness",
-    ]
-
-    private let categoryIcons: [String: String] = [
-        "Tech": "bolt.fill",
-        "AI": "brain.head.profile",
-        "Climate": "leaf.fill",
-        "Fitness": "figure.run",
-        "Food & Drink": "fork.knife",
-        "Arts & Culture": "paintpalette.fill",
-        "Wellness": "leaf.circle.fill",
-    ]
 }
 
 #Preview {

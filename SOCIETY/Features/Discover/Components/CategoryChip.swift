@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct CategoryChip: View {
     let title: String
@@ -14,7 +15,11 @@ struct CategoryChip: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button(action: {
+            let generator = UISelectionFeedbackGenerator()
+            generator.selectionChanged()
+            action()
+        }) {
             ZStack {
                 Capsule()
                     .fill(isSelected ? AppColors.elevatedSurface : Color.clear)

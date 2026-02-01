@@ -11,37 +11,35 @@ import SwiftUI
 struct EventListView: View {
     @StateObject private var viewModel: EventListViewModel
     @EnvironmentObject private var authSession: AuthSessionStore
+    @Binding var requestCreate: Bool
 
     private let eventRepository: any EventRepository
     private let authRepository: any AuthRepository
     private let eventImageUploadService: any EventImageUploadService
+    private let profileImageUploadService: any ProfileImageUploadService
 
     @State private var selectedEvent: Event?
-    @State private var isLoginPresented: Bool = false
     @State private var isCreatePresented: Bool = false
+    @State private var isProfilePresented: Bool = false
     @State private var createSheetDetent: PresentationDetent = .large
 
     init(
         eventRepository: any EventRepository = MockEventRepository(),
         authRepository: any AuthRepository = PreviewAuthRepository(),
-        eventImageUploadService: any EventImageUploadService = MockEventImageUploadService()
+        eventImageUploadService: any EventImageUploadService = MockEventImageUploadService(),
+        profileImageUploadService: any ProfileImageUploadService = MockProfileImageUploadService(),
+        requestCreate: Binding<Bool> = .constant(false)
     ) {
         self.eventRepository = eventRepository
         self.authRepository = authRepository
         self.eventImageUploadService = eventImageUploadService
+        self.profileImageUploadService = profileImageUploadService
+        _requestCreate = requestCreate
         _viewModel = StateObject(wrappedValue: EventListViewModel(repository: eventRepository))
     }
 
     private var isEventDetailPresented: Bool {
         selectedEvent != nil
-    }
-
-    private var isDevAuthBypassEnabled: Bool {
-        #if DEBUG
-            return true
-        #else
-            return false
-        #endif
     }
 
     private var backgroundBlurRadius: CGFloat {
@@ -70,6 +68,9 @@ struct EventListView: View {
                     }
                 }
                 .background(AppColors.background.ignoresSafeArea())
+                .onAppear {
+                    viewModel.refresh()
+                }
 
                 header
                     .padding(.horizontal, 20)
@@ -98,15 +99,6 @@ struct EventListView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $isLoginPresented) {
-            LoginView(
-                authRepository: authRepository,
-                authSession: authSession,
-                onAuthenticated: {
-                    isCreatePresented = true
-                }
-            )
-        }
         .sheet(isPresented: $isCreatePresented) {
             EventCreateView(
                 eventRepository: eventRepository,
@@ -117,9 +109,23 @@ struct EventListView: View {
             .presentationDetents([.large], selection: $createSheetDetent)
             .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $isProfilePresented) {
+            ProfileView(
+                authSession: authSession,
+                profileImageUploadService: profileImageUploadService
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
         .onChange(of: isCreatePresented) { _, isPresented in
             if isPresented {
                 createSheetDetent = .large
+            }
+        }
+        .onChange(of: requestCreate) { _, requested in
+            if requested {
+                isCreatePresented = true
+                requestCreate = false
             }
         }
     }
@@ -137,48 +143,12 @@ struct EventListView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            AsyncImage(
-                url: URL(
-                    string:
-                        "https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?q=80&w=2034&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-                )
-            ) { phase in
-                switch phase {
-                case .empty:
-                    Circle()
-                        .fill(AppColors.surface)
-                        .frame(width: 44, height: 44)
-                        .overlay {
-                            Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundStyle(AppColors.secondaryText)
-                        }
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 44, height: 44)
-                        .clipShape(Circle())
-                case .failure:
-                    Circle()
-                        .fill(AppColors.surface)
-                        .frame(width: 44, height: 44)
-                        .overlay {
-                            Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundStyle(AppColors.secondaryText)
-                        }
-                @unknown default:
-                    Circle()
-                        .fill(AppColors.surface)
-                        .frame(width: 44, height: 44)
-                        .overlay {
-                            Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundStyle(AppColors.secondaryText)
-                        }
-                }
+            Button {
+                isProfilePresented = true
+            } label: {
+                UserAvatarView(imageURL: authSession.profileImageURL, size: 44)
             }
+            .buttonStyle(.plain)
 
             Text("Society")
                 .font(.largeTitle.weight(.bold))
@@ -187,11 +157,7 @@ struct EventListView: View {
             Spacer()
 
             Button {
-                if isDevAuthBypassEnabled || authSession.isAuthenticated {
-                    isCreatePresented = true
-                } else {
-                    isLoginPresented = true
-                }
+                isCreatePresented = true
             } label: {
                 Image(systemName: "plus")
                     .font(.headline.weight(.semibold))

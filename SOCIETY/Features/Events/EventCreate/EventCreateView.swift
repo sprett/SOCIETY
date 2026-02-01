@@ -195,23 +195,24 @@ struct EventCreateView: View {
             Task { await viewModel.loadImageFromSelectedItem() }
         }
     }
+}
 
+extension EventCreateView {
     private var heroPreview: some View {
-        Color.clear
-            .frame(maxWidth: .infinity)
-            .aspectRatio(1, contentMode: .fit)
-            .overlay {
-                PhotosPicker(
-                    selection: $viewModel.selectedImageItems,
-                    maxSelectionCount: 1,
-                    matching: .images
-                ) {
-                    ZStack {
+        PhotosPicker(
+            selection: $viewModel.selectedImageItems,
+            maxSelectionCount: 1,
+            matching: .images
+        ) {
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .overlay(alignment: .center) {
+                    Group {
                         if let data = viewModel.selectedImageData, let uiImage = UIImage(data: data)
                         {
                             Image(uiImage: uiImage)
                                 .resizable()
-                                .aspectRatio(contentMode: .fill)
+                                .scaledToFill()
                         } else {
                             VStack(spacing: 8) {
                                 Image(systemName: "photo.badge.plus")
@@ -228,16 +229,18 @@ struct EventCreateView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                    .overlay {
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .overlay {
+                    if viewModel.selectedImageData == nil {
                         RoundedRectangle(cornerRadius: 28, style: .continuous)
                             .stroke(
                                 AppColors.divider.opacity(1),
                                 style: StrokeStyle(lineWidth: 2, dash: [8]))
                     }
                 }
-                .buttonStyle(.plain)
-            }
+        }
+        .buttonStyle(.plain)
     }
 
     private var actionBar: some View {
@@ -294,25 +297,12 @@ enum EventCreateAlert: Identifiable {
 
 @MainActor
 final class EventCreateViewModel: ObservableObject {
-    static let defaultCategories: [String] = [
-        "AI",
-        "Tech",
-        "Business",
-        "Networking",
-        "Fitness",
-        "Wellness",
-        "Music",
-        "Art",
-        "Food",
-        "Social",
-    ]
-
     @Published var title: String = ""
     @Published var category: String = ""
     @Published var startDate: Date = Date() {
         didSet { adjustEndDateIfNeeded() }
     }
-    @Published var endDate: Date = Date().addingTimeInterval(60 * 60) {
+    @Published var endDate: Date = Date().addingTimeInterval(2 * 60 * 60) {
         didSet {
             guard !isAutoAdjustingEndDate else { return }
             hasUserEditedEndDate = true
@@ -359,9 +349,29 @@ final class EventCreateViewModel: ObservableObject {
         // Keep suggestions in sync.
         addressSearch.$suggestions.assign(to: &$suggestions)
 
-        // Reasonable defaults for MVP.
+        // Reasonable defaults for MVP. Round to 15-min and set end = start + 2h.
         category = "Tech"
-        adjustEndDateIfNeeded(force: true)
+        startDate = Self.roundToFifteenMinutes(startDate)
+        isAutoAdjustingEndDate = true
+        endDate = Self.roundToFifteenMinutes(startDate.addingTimeInterval(2 * 60 * 60))
+        isAutoAdjustingEndDate = false
+    }
+
+    /// Rounds a date to the nearest 15-minute boundary (e.g. 10:07 → 10:00, 10:08 → 10:15).
+    static func roundToFifteenMinutes(_ date: Date) -> Date {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        guard let m = components.minute else { return date }
+        let roundedMinute = (m / 15) * 15
+        return calendar.date(
+            from: DateComponents(
+                year: components.year,
+                month: components.month,
+                day: components.day,
+                hour: components.hour,
+                minute: roundedMinute
+            )
+        ) ?? date
     }
 
     func loadImageFromSelectedItem() async {
@@ -383,7 +393,7 @@ final class EventCreateViewModel: ObservableObject {
     }
 
     var availableCategories: [String] {
-        Self.defaultCategories
+        EventCategories.all
     }
 
     var canCreate: Bool {
@@ -517,9 +527,8 @@ final class EventCreateViewModel: ObservableObject {
     }
 
     private func adjustEndDateIfNeeded(force: Bool = false) {
-        // Keep end time >= start time (+1h default) and auto-update when start changes,
-        // but don't overwrite a user-chosen end time unless it becomes invalid.
-        let defaultEnd = startDate.addingTimeInterval(60 * 60)
+        // When start changes, set end to start + 2h (15-min rounded). Don't overwrite user-chosen end unless invalid.
+        let defaultEnd = Self.roundToFifteenMinutes(startDate.addingTimeInterval(2 * 60 * 60))
 
         if force || (!hasUserEditedEndDate) || (endDate <= startDate) {
             isAutoAdjustingEndDate = true
