@@ -4,7 +4,16 @@ DerivedData/
 .DS_Store
 *.xcuserstate
 xcuserdata/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
 
 ## Local / temp
 .home/
 .tmp/
+
+## Secrets (never commit)
+.env
+.env.*
+!.env.example

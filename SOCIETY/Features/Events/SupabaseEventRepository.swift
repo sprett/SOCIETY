@@ -25,7 +25,10 @@ final class SupabaseEventRepository: EventRepository {
             .execute()
             .value
 
-        return rows.map { $0.toDomain() }
+        let ownerProfiles = await fetchOwnerProfiles(for: rows)
+        return rows.map { row in
+            row.toDomain(ownerProfile: row.ownerID.flatMap { ownerProfiles[$0] })
+        }
     }
 
     func fetchEvents(ids: [UUID]) async throws -> [Event] {
@@ -41,7 +44,10 @@ final class SupabaseEventRepository: EventRepository {
             .execute()
             .value
 
-        return rows.map { $0.toDomain() }
+        let ownerProfiles = await fetchOwnerProfiles(for: rows)
+        return rows.map { row in
+            row.toDomain(ownerProfile: row.ownerID.flatMap { ownerProfiles[$0] })
+        }
     }
 
     func createEvent(_ draft: EventDraft) async throws -> Event {
@@ -79,6 +85,45 @@ final class SupabaseEventRepository: EventRepository {
             .delete()
             .eq("id", value: id.uuidString)
             .execute()
+    }
+
+    /// Fetches profiles for event owners so we can show organizer name (and avoid "Society" fallback).
+    private func fetchOwnerProfiles(for rows: [EventDBRow]) async -> [UUID: (
+        name: String, avatarURL: String?
+    )] {
+        let ownerIDs = Set(rows.compactMap { $0.ownerID })
+        guard !ownerIDs.isEmpty else { return [:] }
+
+        struct ProfileRow: Decodable {
+            let id: UUID
+            let fullName: String?
+            let avatarUrl: String?
+            enum CodingKeys: String, CodingKey {
+                case id
+                case fullName = "full_name"
+                case avatarUrl = "avatar_url"
+            }
+        }
+
+        let idStrings = ownerIDs.map { $0.uuidString }
+        guard
+            let profiles: [ProfileRow] =
+                try? await client
+                .from("profiles")
+                .select("id, full_name, avatar_url")
+                .in("id", values: idStrings)
+                .execute()
+                .value
+        else { return [:] }
+
+        return Dictionary(
+            uniqueKeysWithValues: profiles.map { row in
+                let name =
+                    (row.fullName?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap {
+                        $0.isEmpty ? nil : $0
+                    } ?? "Organizer"
+                return (row.id, (name: name, avatarURL: row.avatarUrl))
+            })
     }
 }
 
@@ -168,9 +213,22 @@ private struct EventDBRow: Decodable {
         case visibility
     }
 
-    func toDomain() -> Event {
+    func toDomain(ownerProfile: (name: String, avatarURL: String?)? = nil) -> Event {
         let sanitizedImageURL = (imageURL ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var hosts: [Host]?
+        if let profile = ownerProfile, let oid = ownerID {
+            let initials = String(profile.name.prefix(2)).uppercased()
+            hosts = [
+                Host(
+                    id: oid,
+                    name: profile.name,
+                    avatarPlaceholder: initials.isEmpty ? "?" : initials,
+                    profileImageURL: profile.avatarURL
+                )
+            ]
+        }
 
         return Event(
             id: id,
@@ -189,7 +247,7 @@ private struct EventDBRow: Decodable {
                 guard let lat = latitude, let lng = longitude else { return nil }
                 return CLLocationCoordinate2D(latitude: lat, longitude: lng)
             }(),
-            hosts: nil,
+            hosts: hosts,
             goingCount: nil,
             about: about
         )

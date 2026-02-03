@@ -384,10 +384,11 @@ final class EventDetailViewModel: ObservableObject {
             return OrganizerDisplay(
                 name: first.name,
                 initials: String(first.avatarPlaceholder.prefix(2)),
-                profileImageURL: nil
+                profileImageURL: first.profileImageURL
             )
         }
-        return OrganizerDisplay(name: "Society", initials: "SO", profileImageURL: nil)
+        // Owner exists but profile not loaded (e.g. fetch failed or legacy data)
+        return OrganizerDisplay(name: "Organizer", initials: "?", profileImageURL: nil)
     }
 
     var dateText: String {
@@ -655,8 +656,16 @@ struct HostRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            EventAvatar(initials: String(host.avatarPlaceholder.prefix(2)), category: category)
-                .frame(width: 36, height: 36)
+            Group {
+                if let url = host.profileImageURL {
+                    UserAvatarView(imageURL: url, size: 36)
+                } else {
+                    EventAvatar(
+                        initials: String(host.avatarPlaceholder.prefix(2)), category: category
+                    )
+                    .frame(width: 36, height: 36)
+                }
+            }
 
             Text(host.name)
                 .font(.subheadline.weight(.semibold))

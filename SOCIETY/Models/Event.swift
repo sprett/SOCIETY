@@ -5,13 +5,22 @@
 //  Created by Dino Hukanovic on 11/01/2026.
 //
 
-import Foundation
 import CoreLocation
+import Foundation
 
 struct Host: Identifiable, Hashable {
     let id: UUID
     let name: String
     let avatarPlaceholder: String
+    /// When set, show this URL as the host's profile image instead of initials.
+    let profileImageURL: String?
+
+    init(id: UUID, name: String, avatarPlaceholder: String, profileImageURL: String? = nil) {
+        self.id = id
+        self.name = name
+        self.avatarPlaceholder = avatarPlaceholder
+        self.profileImageURL = profileImageURL
+    }
 }
 
 struct Event: Identifiable, Hashable {
@@ -94,22 +103,14 @@ struct Event: Identifiable, Hashable {
     }
 
     static func == (lhs: Event, rhs: Event) -> Bool {
-        lhs.id == rhs.id &&
-        lhs.ownerID == rhs.ownerID &&
-        lhs.title == rhs.title &&
-        lhs.category == rhs.category &&
-        lhs.startDate == rhs.startDate &&
-        lhs.venueName == rhs.venueName &&
-        lhs.neighborhood == rhs.neighborhood &&
-        lhs.distanceKm == rhs.distanceKm &&
-        lhs.imageNameOrURL == rhs.imageNameOrURL &&
-        lhs.isFeatured == rhs.isFeatured &&
-        lhs.endDate == rhs.endDate &&
-        lhs.addressLine == rhs.addressLine &&
-        lhs.coordinate?.latitude == rhs.coordinate?.latitude &&
-        lhs.coordinate?.longitude == rhs.coordinate?.longitude &&
-        lhs.hosts == rhs.hosts &&
-        lhs.goingCount == rhs.goingCount &&
-        lhs.about == rhs.about
+        lhs.id == rhs.id && lhs.ownerID == rhs.ownerID && lhs.title == rhs.title
+            && lhs.category == rhs.category && lhs.startDate == rhs.startDate
+            && lhs.venueName == rhs.venueName && lhs.neighborhood == rhs.neighborhood
+            && lhs.distanceKm == rhs.distanceKm && lhs.imageNameOrURL == rhs.imageNameOrURL
+            && lhs.isFeatured == rhs.isFeatured && lhs.endDate == rhs.endDate
+            && lhs.addressLine == rhs.addressLine
+            && lhs.coordinate?.latitude == rhs.coordinate?.latitude
+            && lhs.coordinate?.longitude == rhs.coordinate?.longitude && lhs.hosts == rhs.hosts
+            && lhs.goingCount == rhs.goingCount && lhs.about == rhs.about
     }
 }
