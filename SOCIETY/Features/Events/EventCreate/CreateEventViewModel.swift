@@ -47,7 +47,8 @@ final class CreateEventViewModel: ObservableObject {
     @Published var isShowingVisibilitySheet: Bool = false
 
     @Published var isCreating: Bool = false
-    @Published var createError: Error?
+    @Published var createErrorMessage: String?
+    @Published var isCreateErrorPresented: Bool = false
 
     private let authSession: AuthSessionStore
     private let eventRepository: any EventRepository
@@ -113,10 +114,26 @@ final class CreateEventViewModel: ObservableObject {
         startDate = endDate.addingTimeInterval(-Self.eventDuration)
     }
 
-    func createEvent() {
+    func createEvent() async {
         guard isFormValid, let location = selectedLocation else { return }
 
+        isCreating = true
+        createErrorMessage = nil
+        defer { isCreating = false }
+
         let addressLine = location.addressLine ?? ""
+
+        var imageURL: String?
+        if let data = coverImageData, !data.isEmpty {
+            do {
+                let url = try await eventImageUploadService.upload(data)
+                imageURL = url.absoluteString
+            } catch {
+                createErrorMessage = error.localizedDescription
+                isCreateErrorPresented = true
+                return
+            }
+        }
 
         let draft = EventDraft(
             ownerID: authSession.userID,
@@ -129,41 +146,59 @@ final class CreateEventViewModel: ObservableObject {
             neighborhood: location.neighborhood,
             latitude: location.coordinate.latitude,
             longitude: location.coordinate.longitude,
-            imageURL: nil,
+            imageURL: imageURL,
             about: descriptionText.trimmingCharacters(in: .whitespacesAndNewlines),
             isFeatured: false,
             visibility: visibility
         )
 
-        isCreating = true
-        createError = nil
-        Task {
-            do {
-                let createdEvent = try await eventRepository.createEvent(draft)
-                if let imageData = coverImageData {
-                    let dataToUpload =
-                        UIImage(data: imageData)?.jpegData(compressionQuality: 0.85)
-                        ?? imageData
-                    let url = try await eventImageUploadService.upload(dataToUpload)
-                    try? await eventRepository.updateEventCover(
-                        eventID: createdEvent.id,
-                        imageURL: url.absoluteString
-                    )
-                }
-                // Creator is automatically "going" so the event shows in home (events you're attending).
-                if let userId = authSession.userID {
-                    try? await rsvpRepository.addRsvp(eventId: createdEvent.id, userId: userId)
-                }
-                await MainActor.run {
-                    isCreating = false
-                    onCreated(createdEvent)
-                }
-            } catch {
-                await MainActor.run {
-                    isCreating = false
-                    createError = error
+        do {
+            var event = try await eventRepository.createEvent(draft)
+
+            if event.hosts == nil, event.ownerID == authSession.userID, let uid = authSession.userID
+            {
+                let name = authSession.userName ?? "Me"
+                let initials = String(name.prefix(2)).uppercased()
+                let placeholder = initials.isEmpty ? "?" : initials
+                event = Event(
+                    id: event.id,
+                    ownerID: event.ownerID,
+                    title: event.title,
+                    category: event.category,
+                    startDate: event.startDate,
+                    venueName: event.venueName,
+                    neighborhood: event.neighborhood,
+                    distanceKm: event.distanceKm,
+                    imageNameOrURL: event.imageNameOrURL,
+                    isFeatured: event.isFeatured,
+                    endDate: event.endDate,
+                    addressLine: event.addressLine,
+                    coordinate: event.coordinate,
+                    hosts: [
+                        Host(
+                            id: uid,
+                            name: name,
+                            avatarPlaceholder: placeholder,
+                            profileImageURL: authSession.profileImageURL
+                        )
+                    ],
+                    goingCount: event.goingCount,
+                    about: event.about
+                )
+            }
+
+            if let userID = authSession.userID {
+                do {
+                    try await rsvpRepository.addRsvp(eventId: event.id, userId: userID)
+                } catch {
+                    print("[CreateEvent] Auto-RSVP failed: \(error)")
                 }
             }
+
+            onCreated(event)
+        } catch {
+            createErrorMessage = error.localizedDescription
+            isCreateErrorPresented = true
         }
     }
 }
