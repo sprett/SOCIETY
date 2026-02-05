@@ -116,6 +116,9 @@ struct EventListView: View {
         .fullScreenCover(isPresented: $isCreatePresented) {
             EventCreateSheetHost(
                 authSession: authSession,
+                eventRepository: eventRepository,
+                eventImageUploadService: eventImageUploadService,
+                rsvpRepository: rsvpRepository,
                 onCreated: { createdEvent in
                     selectedEvent = createdEvent
                     viewModel.refresh()

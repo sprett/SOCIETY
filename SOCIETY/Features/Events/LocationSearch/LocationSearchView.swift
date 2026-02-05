@@ -10,11 +10,11 @@ struct LocationSearchView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: LocationSearchViewModel
 
-    var onSelect: (String, String?, CLLocationCoordinate2D) -> Void
+    var onSelect: (String, String?, String?, CLLocationCoordinate2D) -> Void
 
     init(
         viewModel: LocationSearchViewModel? = nil,
-        onSelect: @escaping (String, String?, CLLocationCoordinate2D) -> Void
+        onSelect: @escaping (String, String?, String?, CLLocationCoordinate2D) -> Void
     ) {
         _viewModel = StateObject(wrappedValue: viewModel ?? LocationSearchViewModel())
         self.onSelect = onSelect
@@ -81,7 +81,11 @@ struct LocationSearchView: View {
                             Task {
                                 if let result = await viewModel.resolve(suggestion) {
                                     onSelect(
-                                        result.displayName, result.addressLine, result.coordinate)
+                                        result.displayName,
+                                        result.addressLine,
+                                        result.neighborhood,
+                                        result.coordinate
+                                    )
                                     dismiss()
                                 }
                             }
@@ -108,5 +112,5 @@ struct LocationSearchView: View {
 }
 
 #Preview {
-    LocationSearchView { _, _, _ in }
+    LocationSearchView { _, _, _, _ in }
 }

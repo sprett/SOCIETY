@@ -8,15 +8,19 @@ import CoreLocation
 import Foundation
 import PhotosUI
 import SwiftUI
+import UIKit
 
 struct SelectedLocation: Equatable {
     let displayName: String
     let addressLine: String?
+    /// Neighborhood name for list/DB (e.g. Grünerløkka), from placemark subLocality/locality.
+    let neighborhood: String?
     let coordinate: CLLocationCoordinate2D
 
     static func == (lhs: SelectedLocation, rhs: SelectedLocation) -> Bool {
         lhs.displayName == rhs.displayName
             && lhs.addressLine == rhs.addressLine
+            && lhs.neighborhood == rhs.neighborhood
             && lhs.coordinate.latitude == rhs.coordinate.latitude
             && lhs.coordinate.longitude == rhs.coordinate.longitude
     }
@@ -42,11 +46,26 @@ final class CreateEventViewModel: ObservableObject {
     @Published var isShowingDescriptionEditor: Bool = false
     @Published var isShowingVisibilitySheet: Bool = false
 
+    @Published var isCreating: Bool = false
+    @Published var createError: Error?
+
     private let authSession: AuthSessionStore
+    private let eventRepository: any EventRepository
+    private let eventImageUploadService: any EventImageUploadService
+    private let rsvpRepository: any RsvpRepository
     private let onCreated: (Event) -> Void
 
-    init(authSession: AuthSessionStore, onCreated: @escaping (Event) -> Void) {
+    init(
+        authSession: AuthSessionStore,
+        eventRepository: any EventRepository,
+        eventImageUploadService: any EventImageUploadService,
+        rsvpRepository: any RsvpRepository,
+        onCreated: @escaping (Event) -> Void
+    ) {
         self.authSession = authSession
+        self.eventRepository = eventRepository
+        self.eventImageUploadService = eventImageUploadService
+        self.rsvpRepository = rsvpRepository
         self.onCreated = onCreated
     }
 
@@ -60,11 +79,15 @@ final class CreateEventViewModel: ObservableObject {
     }
 
     func selectLocation(
-        displayName: String, addressLine: String?, coordinate: CLLocationCoordinate2D
+        displayName: String,
+        addressLine: String?,
+        neighborhood: String?,
+        coordinate: CLLocationCoordinate2D
     ) {
         selectedLocation = SelectedLocation(
             displayName: displayName,
             addressLine: addressLine,
+            neighborhood: neighborhood,
             coordinate: coordinate
         )
     }
@@ -93,7 +116,6 @@ final class CreateEventViewModel: ObservableObject {
     func createEvent() {
         guard isFormValid, let location = selectedLocation else { return }
 
-        let neighborhood = location.addressLine ?? location.displayName
         let addressLine = location.addressLine ?? ""
 
         let draft = EventDraft(
@@ -104,7 +126,7 @@ final class CreateEventViewModel: ObservableObject {
             endDate: endDate,
             venueName: location.displayName,
             addressLine: addressLine,
-            neighborhood: neighborhood.isEmpty ? nil : neighborhood,
+            neighborhood: location.neighborhood,
             latitude: location.coordinate.latitude,
             longitude: location.coordinate.longitude,
             imageURL: nil,
@@ -113,8 +135,36 @@ final class CreateEventViewModel: ObservableObject {
             visibility: visibility
         )
 
-        let event = Event.from(draft: draft)
-        onCreated(event)
+        isCreating = true
+        createError = nil
+        Task {
+            do {
+                let createdEvent = try await eventRepository.createEvent(draft)
+                if let imageData = coverImageData {
+                    let dataToUpload =
+                        UIImage(data: imageData)?.jpegData(compressionQuality: 0.85)
+                        ?? imageData
+                    let url = try await eventImageUploadService.upload(dataToUpload)
+                    try? await eventRepository.updateEventCover(
+                        eventID: createdEvent.id,
+                        imageURL: url.absoluteString
+                    )
+                }
+                // Creator is automatically "going" so the event shows in home (events you're attending).
+                if let userId = authSession.userID {
+                    try? await rsvpRepository.addRsvp(eventId: createdEvent.id, userId: userId)
+                }
+                await MainActor.run {
+                    isCreating = false
+                    onCreated(createdEvent)
+                }
+            } catch {
+                await MainActor.run {
+                    isCreating = false
+                    createError = error
+                }
+            }
+        }
     }
 }
 
