@@ -2,535 +2,1027 @@
 //  EventCreateView.swift
 //  SOCIETY
 //
-//  Created by Dino Hukanovic on 20/01/2026.
-//
 
-import Combine
-import Contacts
 import MapKit
 import PhotosUI
 import SwiftUI
+import UIKit
 
-struct EventCreateView: View {
-    @Environment(\.dismiss) private var dismiss
-    @StateObject private var viewModel: EventCreateViewModel
+// #region agent log
+private func _dbg(_ msg: String, loc: String, hid: String) {
+    let logPath = "/Users/dinoh/Documents/personal/code/society/SOCIETY/.cursor/debug.log"
+    let ts = Int(Date().timeIntervalSince1970 * 1000)
+    let line =
+        "{\"location\":\"\(loc)\",\"message\":\"\(msg)\",\"timestamp\":\(ts),\"sessionId\":\"debug-session\",\"hypothesisId\":\"\(hid)\"}\n"
+    guard let d = line.data(using: .utf8) else { return }
+    let url = URL(fileURLWithPath: logPath)
+    if !FileManager.default.fileExists(atPath: logPath) {
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: logPath, contents: nil, attributes: nil)
+    }
+    if let h = try? FileHandle(forWritingTo: url) {
+        h.seekToEndOfFile()
+        h.write(d)
+        try? h.close()
+    }
+}
+// #endregion
+
+private func _glassCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    content()
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            .ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
+        }
+}
+
+/// Wheel date/time picker with time restricted to 15-minute intervals (date unchanged).
+private struct MinuteIntervalDatePicker: UIViewRepresentable {
+    @Binding var date: Date
+    var minuteInterval: Int = 15
+
+    func makeUIView(context: Context) -> UIDatePicker {
+        let picker = UIDatePicker()
+        picker.datePickerMode = .dateAndTime
+        picker.minuteInterval = minuteInterval
+        picker.preferredDatePickerStyle = .wheels
+        picker.addTarget(
+            context.coordinator, action: #selector(Coordinator.valueChanged), for: .valueChanged)
+        return picker
+    }
+
+    func updateUIView(_ picker: UIDatePicker, context: Context) {
+        picker.date = date
+        picker.minuteInterval = minuteInterval
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(date: $date)
+    }
+
+    class Coordinator: NSObject {
+        var date: Binding<Date>
+        init(date: Binding<Date>) { self.date = date }
+        @objc func valueChanged(_ sender: UIDatePicker) { date.wrappedValue = sender.date }
+    }
+}
+
+private struct CreateEventFormFieldsView: View {
+    @ObservedObject var viewModel: CreateEventViewModel
+    @Binding var showStartDatePicker: Bool
+    @Binding var showEndDatePicker: Bool
+    @Binding var showLocationSearch: Bool
+    @Binding var showDescriptionEditor: Bool
+
+    var body: some View {
+        VStack(spacing: 12) {
+            _glassCard {
+                TextField("Event Name", text: $viewModel.eventName)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(AppColors.primaryText)
+            }
+
+            _glassCard {
+                VStack(spacing: 0) {
+                    Button {
+                        showStartDatePicker = true
+                    } label: {
+                        HStack {
+                            Text("Start")
+                                .font(.subheadline)
+                                .foregroundStyle(AppColors.secondaryText)
+                            Spacer()
+                            Text(EventDateFormatter.startDateWithTime(viewModel.startDate))
+                                .font(.subheadline)
+                                .foregroundStyle(AppColors.primaryText)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(AppColors.tertiaryText)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 28)
+                        .contentShape(Rectangle())
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                    Divider()
+                        .background(AppColors.divider)
+                    Button {
+                        showEndDatePicker = true
+                    } label: {
+                        HStack {
+                            Text("End")
+                                .font(.subheadline)
+                                .foregroundStyle(AppColors.secondaryText)
+                            Spacer()
+                            Text(EventDateFormatter.timeOnly(viewModel.endDate))
+                                .font(.subheadline)
+                                .foregroundStyle(AppColors.primaryText)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(AppColors.tertiaryText)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 28)
+                        .contentShape(Rectangle())
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.vertical, 4)
+            }
+
+            _glassCard {
+                Button {
+                    showLocationSearch = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "mappin.circle.fill")
+                            .foregroundStyle(AppColors.tertiaryText)
+                        Text(viewModel.selectedLocation?.displayName ?? "Choose Location")
+                            .font(.subheadline)
+                            .foregroundStyle(
+                                viewModel.selectedLocation != nil
+                                    ? AppColors.primaryText : AppColors.secondaryText)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.tertiaryText)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            _glassCard {
+                Button {
+                    showDescriptionEditor = true
+                } label: {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "list.bullet")
+                            .foregroundStyle(AppColors.tertiaryText)
+                        VStack(alignment: .leading, spacing: 4) {
+                            if viewModel.descriptionText.isEmpty {
+                                Text("Add Description")
+                                    .font(.subheadline)
+                                    .foregroundStyle(AppColors.secondaryText)
+                            } else {
+                                Text(truncatedDescription)
+                                    .font(.subheadline)
+                                    .foregroundStyle(AppColors.primaryText)
+                                    .lineLimit(2)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.tertiaryText)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var truncatedDescription: String {
+        let t = viewModel.descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.count <= 80 { return t }
+        return String(t.prefix(80)) + "…"
+    }
+}
+
+/// Event Visibility sheet content matching the Luma-style design: icon, title, intro, Public/Private options, Confirm.
+private struct EventVisibilitySheetContent: View {
+    let initialVisibility: EventVisibility
+    let onConfirm: (EventVisibility) -> Void
+    let onDismiss: () -> Void
+
+    @State private var selectedVisibility: EventVisibility
 
     init(
-        eventRepository: any EventRepository,
-        authSession: AuthSessionStore,
-        eventImageUploadService: any EventImageUploadService,
-        onCreated: @escaping () -> Void = {}
+        initialVisibility: EventVisibility, onConfirm: @escaping (EventVisibility) -> Void,
+        onDismiss: @escaping () -> Void
     ) {
-        _viewModel = StateObject(
-            wrappedValue: EventCreateViewModel(
-                eventRepository: eventRepository,
-                authSession: authSession,
-                eventImageUploadService: eventImageUploadService,
-                onCreated: onCreated
-            )
-        )
+        self.initialVisibility = initialVisibility
+        self.onConfirm = onConfirm
+        self.onDismiss = onDismiss
+        _selectedVisibility = State(initialValue: initialVisibility)
     }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
-                heroPreview
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Create event")
-                        .font(.system(size: 32, weight: .bold))
+            VStack(alignment: .leading, spacing: 20) {
+                // Header: icon, title, close
+                HStack(alignment: .top) {
+                    Image(systemName: "globe")
+                        .font(.title2)
                         .foregroundStyle(AppColors.primaryText)
-
-                    Text("Fill in the details. You can edit later.")
-                        .font(.subheadline)
-                        .foregroundStyle(AppColors.tertiaryText)
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    EventDetailSectionHeader(title: "Basics")
-
-                    TextField("Title", text: $viewModel.title)
-                        .textInputAutocapitalization(.words)
-                        .padding(12)
-                        .background(
-                            AppColors.surface,
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                    Picker(selection: $viewModel.category) {
-                        ForEach(viewModel.availableCategories, id: \.self) { category in
-                            Text(category).tag(category)
-                        }
+                        .frame(width: 44, height: 44)
+                        .background(AppColors.surface, in: Circle())
+                    Spacer()
+                    Button {
+                        onDismiss()
                     } label: {
-                        Text(viewModel.category)
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.medium))
                             .foregroundStyle(AppColors.primaryText)
+                            .frame(width: 44, height: 44)
                     }
-                    .pickerStyle(.menu)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        AppColors.surface,
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .buttonStyle(.plain)
+                    .background(visibilitySheetLiquidGlassCircle)
+                    .clipShape(Circle())
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    EventDetailSectionHeader(title: "Time")
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        DatePicker("Start", selection: $viewModel.startDate)
-                            .datePickerStyle(.compact)
-
-                        DatePicker("End", selection: $viewModel.endDate)
-                            .datePickerStyle(.compact)
-                    }
+                Text("Event Visibility")
+                    .font(.title2.weight(.bold))
                     .foregroundStyle(AppColors.primaryText)
-                }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    EventDetailSectionHeader(title: "Location")
+                Text(
+                    "Choose how this event shows up within SOCIETY. People with the direct link to the event can always access it."
+                )
+                .font(.subheadline)
+                .foregroundStyle(AppColors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        TextField("Search address", text: $viewModel.addressQuery)
-                            .textInputAutocapitalization(.words)
-                            .padding(12)
-                            .background(
-                                AppColors.surface,
-                                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                        if !viewModel.suggestions.isEmpty, viewModel.addressLine == nil {
-                            VStack(spacing: 0) {
-                                ForEach(viewModel.suggestions) { suggestion in
-                                    Button {
-                                        Task { await viewModel.selectSuggestion(suggestion) }
-                                    } label: {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(suggestion.title)
-                                                .font(.subheadline.weight(.semibold))
-                                                .foregroundStyle(AppColors.primaryText)
-                                            if !suggestion.subtitle.isEmpty {
-                                                Text(suggestion.subtitle)
-                                                    .font(.footnote)
-                                                    .foregroundStyle(AppColors.tertiaryText)
-                                            }
-                                        }
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.vertical, 10)
-                                        .padding(.horizontal, 10)
-                                    }
-                                    .buttonStyle(.plain)
-
-                                    Divider().background(AppColors.divider.opacity(0.7))
-                                }
-                            }
-                            .background(
-                                AppColors.elevatedSurface,
-                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            )
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
-                            }
-                        }
-
-                        TextField("Venue name", text: $viewModel.venueName)
-                            .textInputAutocapitalization(.words)
-                            .padding(12)
-                            .background(
-                                AppColors.surface,
-                                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                        if let addressLine = viewModel.addressLine, !addressLine.isEmpty {
-                            Text(addressLine)
-                                .font(.footnote)
-                                .foregroundStyle(AppColors.tertiaryText)
-                        }
-
-                        if let coordinate = viewModel.coordinate {
-                            EventLocationMap(title: viewModel.venueName, coordinate: coordinate)
-                        }
+                // Options
+                VStack(spacing: 0) {
+                    visibilityRow(
+                        title: "Public",
+                        description:
+                            "Shown on SOCIETY events feed. Eligible to be featured.",
+                        isSelected: selectedVisibility == .public
+                    ) {
+                        selectedVisibility = .public
+                    }
+                    Divider()
+                        .background(AppColors.divider)
+                    visibilityRow(
+                        title: "Private",
+                        description:
+                            "Only people invited or with the link can register.",
+                        isSelected: selectedVisibility == .private
+                    ) {
+                        selectedVisibility = .private
                     }
                 }
+                .background(
+                    AppColors.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 12) {
-                    EventDetailSectionHeader(title: "Details")
-
-                    TextField("About", text: $viewModel.about, axis: .vertical)
-                        .lineLimit(4, reservesSpace: true)
-                        .padding(12)
-                        .background(
-                            AppColors.surface,
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                Button {
+                    onConfirm(selectedVisibility)
+                } label: {
+                    Text("Confirm")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(AppColors.background)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
                 }
+                .background(
+                    AppColors.primaryText,
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                )
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 24)
-            .padding(.bottom, 40)
+            .padding(20)
+            .padding(.bottom, 24)
         }
-        .background(AppColors.background.ignoresSafeArea())
-        .safeAreaInset(edge: .bottom) {
-            actionBar
-        }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Close") { dismiss() }
-                    .foregroundStyle(AppColors.primaryText)
-            }
-        }
-        .onChange(of: viewModel.selectedImageItems) { _, _ in
-            Task { await viewModel.loadImageFromSelectedItem() }
+        .scrollBounceBehavior(.basedOnSize)
+        .background(visibilitySheetLiquidGlassBackground)
+        .ignoresSafeArea(edges: .all)
+    }
+
+    @ViewBuilder
+    private var visibilitySheetLiquidGlassCircle: some View {
+        if #available(iOS 26.0, *) {
+            Color.clear.glassEffect(.regular, in: .circle)
+        } else {
+            Color.clear.background(.ultraThinMaterial, in: Circle())
         }
     }
-}
 
-extension EventCreateView {
-    private var heroPreview: some View {
-        let imageData = viewModel.selectedImageData
-        return PhotosPicker(
-            selection: $viewModel.selectedImageItems,
-            maxSelectionCount: 1,
-            matching: .images
-        ) {
-            Color.clear
-                .aspectRatio(1, contentMode: .fit)
-                .overlay(alignment: .center) {
-                    Group {
-                        if let data = imageData, let uiImage = UIImage(data: data) {
-                            Image(uiImage: uiImage)
-                                .resizable()
-                                .scaledToFill()
-                        } else {
-                            VStack(spacing: 8) {
-                                Image(systemName: "photo.badge.plus")
-                                    .font(.system(size: 32))
-                                    .foregroundStyle(AppColors.tertiaryText)
-                                Text("Upload image, max 5MB")
-                                    .font(.subheadline)
-                                    .foregroundStyle(AppColors.secondaryText)
-                                Text("Tap to upload")
-                                    .font(.footnote)
-                                    .foregroundStyle(AppColors.tertiaryText)
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                .overlay {
-                    if imageData == nil {
-                        RoundedRectangle(cornerRadius: 28, style: .continuous)
-                            .stroke(
-                                AppColors.divider.opacity(1),
-                                style: StrokeStyle(lineWidth: 2, dash: [8]))
+    @ViewBuilder
+    private var visibilitySheetLiquidGlassBackground: some View {
+        if #available(iOS 26.0, *) {
+            Color.clear.glassEffect(
+                .regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        } else {
+            Color.clear.background(
+                .ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        }
+    }
+
+    private func visibilityRow(
+        title: String,
+        description: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    Circle()
+                        .strokeBorder(AppColors.divider, lineWidth: 2)
+                        .frame(width: 22, height: 22)
+                    if isSelected {
+                        Circle()
+                            .fill(AppColors.primaryText)
+                            .frame(width: 14, height: 14)
+                        Image(systemName: "checkmark")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(AppColors.background)
                     }
                 }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(AppColors.primaryText)
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(AppColors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-
-    private var actionBar: some View {
-        HStack(spacing: 12) {
-            Button {
-                Task { await viewModel.createEventAndDismiss(dismiss: dismiss) }
-            } label: {
-                HStack(spacing: 10) {
-                    if viewModel.isSaving {
-                        ProgressView()
-                            .tint(.black)
-                    } else {
-                        Image(systemName: "plus")
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    Text("Create")
-                        .font(.subheadline.weight(.semibold))
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.black)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .disabled(!viewModel.canCreate || viewModel.isSaving)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 10)
-        .background(
-            .ultraThinMaterial,
-            in: RoundedRectangle(cornerRadius: 22, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
-        }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 10)
     }
 }
 
 @MainActor
-final class EventCreateViewModel: ObservableObject {
-    @Published var title: String = ""
-    @Published var category: String = ""
-    @Published var startDate: Date = Date() {
-        didSet { adjustEndDateIfNeeded() }
-    }
-    @Published var endDate: Date = Date().addingTimeInterval(2 * 60 * 60) {
-        didSet {
-            guard !isAutoAdjustingEndDate else { return }
-            hasUserEditedEndDate = true
-        }
-    }
-    @Published var venueName: String = ""
-    @Published var addressQuery: String = "" {
-        didSet { addressSearch.updateQuery(addressQuery) }
-    }
-    @Published var selectedImageItems: [PhotosPickerItem] = []
-    @Published private(set) var selectedImageData: Data?
-    @Published var about: String = ""
+struct EventCreateView: View {
+    @ObservedObject var viewModel: CreateEventViewModel
 
-    @Published private(set) var suggestions: [AddressSuggestion] = []
-    @Published private(set) var addressLine: String?
-    @Published private(set) var neighborhood: String?
-    @Published private(set) var coordinate: CLLocationCoordinate2D?
-
-    @Published private(set) var isSaving: Bool = false
-
-    private let eventRepository: any EventRepository
     private let authSession: AuthSessionStore
-    private let eventImageUploadService: any EventImageUploadService
-    private let onCreated: () -> Void
-
-    private static let maxImageBytes = 5 * 1024 * 1024
-
-    private let addressSearch = AddressSearchService()
-    private var hasUserEditedEndDate: Bool = false
-    private var isAutoAdjustingEndDate: Bool = false
+    private let customDismiss: (() -> Void)?
 
     init(
-        eventRepository: any EventRepository,
+        viewModel: CreateEventViewModel,
         authSession: AuthSessionStore,
-        eventImageUploadService: any EventImageUploadService,
-        onCreated: @escaping () -> Void
+        onDismiss: (() -> Void)? = nil
     ) {
-        self.eventRepository = eventRepository
+        self._viewModel = ObservedObject(initialValue: viewModel)
         self.authSession = authSession
-        self.eventImageUploadService = eventImageUploadService
-        self.onCreated = onCreated
-
-        // Keep suggestions in sync.
-        addressSearch.$suggestions.assign(to: &$suggestions)
-
-        // Reasonable defaults for MVP. Round to 15-min and set end = start + 2h.
-        category = "Tech"
-        startDate = Self.roundToFifteenMinutes(startDate)
-        isAutoAdjustingEndDate = true
-        endDate = Self.roundToFifteenMinutes(startDate.addingTimeInterval(2 * 60 * 60))
-        isAutoAdjustingEndDate = false
+        self.customDismiss = onDismiss
     }
 
-    /// Returns CNPostalAddress from an MKMapItem. Uses placemark (deprecated in iOS 26 in favor of address/addressRepresentations).
-    private static func postalAddress(from item: MKMapItem) -> CNPostalAddress? {
-        item.placemark.postalAddress
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 20) {
+                topBar
+                mediaTile
+                CreateEventFormFieldsView(
+                    viewModel: viewModel,
+                    showStartDatePicker: $viewModel.isShowingStartDatePicker,
+                    showEndDatePicker: $viewModel.isShowingEndDatePicker,
+                    showLocationSearch: $viewModel.isShowingLocationSearch,
+                    showDescriptionEditor: $viewModel.isShowingDescriptionEditor
+                )
+                optionsSection
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 40)
+        }
+        .background(createEventBackground)
+        .onChange(of: viewModel.coverPickerItem) { _, newItem in
+            Task {
+                await loadCoverImage(from: newItem)
+            }
+        }
+        .sheet(isPresented: $viewModel.isShowingStartDatePicker) {
+            dateTimePickerSheet(
+                date: $viewModel.startDate,
+                title: "Start",
+                onDone: { viewModel.setStartDate($0) }
+            )
+        }
+        .sheet(isPresented: $viewModel.isShowingEndDatePicker) {
+            dateTimePickerSheet(
+                date: $viewModel.endDate,
+                title: "End",
+                onDone: { viewModel.setEndDate($0) }
+            )
+        }
+        .sheet(isPresented: $viewModel.isShowingLocationSearch) {
+            LocationSearchView { displayName, addressLine, coordinate in
+                viewModel.selectLocation(
+                    displayName: displayName, addressLine: addressLine, coordinate: coordinate)
+                viewModel.isShowingLocationSearch = false
+            }
+        }
+        .sheet(isPresented: $viewModel.isShowingDescriptionEditor) {
+            RichTextEditorView(text: $viewModel.descriptionText)
+        }
+        .sheet(isPresented: $viewModel.isShowingVisibilitySheet) {
+            EventVisibilitySheetContent(
+                initialVisibility: viewModel.visibility,
+                onConfirm: {
+                    viewModel.setVisibility($0)
+                    viewModel.isShowingVisibilitySheet = false
+                },
+                onDismiss: { viewModel.isShowingVisibilitySheet = false }
+            )
+            .presentationDetents([.height(420)])
+        }
     }
 
-    /// Returns (postalAddress, locality, subAdministrativeArea) from an MKMapItem.
-    private static func addressComponents(from item: MKMapItem) -> (
-        CNPostalAddress?, String?, String?
+    private var createEventBackground: some View {
+        (Color(lightColor: Color(uiColor: .systemGray6), darkColor: Color.white.opacity(0.06)))
+            .ignoresSafeArea()
+    }
+
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                customDismiss?()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AppColors.primaryText)
+            .frame(width: 44, height: 44)
+            .background(liquidGlassCircleBackground)
+            .clipShape(Circle())
+
+            Spacer()
+
+            Text("Create Event")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppColors.primaryText)
+
+            Spacer()
+
+            Button {
+                viewModel.createEvent()
+            } label: {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title2)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(viewModel.isFormValid ? AppColors.primaryText : AppColors.tertiaryText)
+            .opacity(viewModel.isFormValid ? 1 : 0.5)
+            .disabled(!viewModel.isFormValid)
+            .frame(width: 44, height: 44)
+            .background(liquidGlassCircleBackground)
+            .clipShape(Circle())
+        }
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private var liquidGlassCircleBackground: some View {
+        if #available(iOS 26.0, *) {
+            Color.clear.glassEffect(.regular, in: .circle)
+        } else {
+            Color.clear.background(.ultraThinMaterial, in: Circle())
+        }
+    }
+
+    private var mediaTile: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            ZStack {
+                if let data = viewModel.coverImageData, let uiImage = UIImage(data: data) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: side, height: side)
+                        .clipped()
+                } else {
+                    VStack(spacing: 8) {
+                        Image(systemName: "photo.badge.plus")
+                            .font(.title)
+                            .foregroundStyle(AppColors.tertiaryText)
+                        Text("Upload image")
+                            .font(.subheadline)
+                            .foregroundStyle(AppColors.secondaryText)
+                    }
+                    .frame(width: side, height: side)
+                    .background(AppColors.surface.opacity(0.5))
+                }
+            }
+            .frame(width: side, height: side)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(
+                        AppColors.divider,
+                        style: viewModel.coverImageData == nil
+                            ? StrokeStyle(lineWidth: 2, dash: [8, 4])
+                            : StrokeStyle(lineWidth: 1)
+                    )
+            }
+            .overlay(alignment: .bottomTrailing) {
+                PhotosPicker(
+                    selection: $viewModel.coverPickerItem,
+                    matching: .images
+                ) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(AppColors.primaryText)
+                        .background(Circle().fill(.ultraThinMaterial))
+                }
+                .buttonStyle(.plain)
+                .padding(12)
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+    }
+
+    private var optionsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("OPTIONS")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppColors.secondaryText)
+            _glassCard {
+                Button {
+                    viewModel.isShowingVisibilitySheet = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "eye")
+                            .foregroundStyle(AppColors.tertiaryText)
+                        Text("Visibility")
+                            .font(.subheadline)
+                            .foregroundStyle(AppColors.primaryText)
+                        Spacer()
+                        Text(viewModel.visibility == .public ? "Public" : "Private")
+                            .font(.subheadline)
+                            .foregroundStyle(AppColors.secondaryText)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.tertiaryText)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func dateTimePickerSheet(
+        date: Binding<Date>,
+        title: String,
+        onDone: @escaping (Date) -> Void
+    ) -> some View {
+        NavigationStack {
+            MinuteIntervalDatePicker(date: date)
+                .frame(maxWidth: .infinity)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            if title == "Start" {
+                                viewModel.isShowingStartDatePicker = false
+                            } else {
+                                viewModel.isShowingEndDatePicker = false
+                            }
+                        }
+                        .foregroundStyle(AppColors.primaryText)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            onDone(date.wrappedValue)
+                            if title == "Start" {
+                                viewModel.isShowingStartDatePicker = false
+                            } else {
+                                viewModel.isShowingEndDatePicker = false
+                            }
+                        }
+                        .foregroundStyle(AppColors.primaryText)
+                    }
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.fraction(1.0 / 3.0)])
+    }
+
+    private func loadCoverImage(from item: PhotosPickerItem?) async {
+        guard let item = item else {
+            viewModel.coverImageData = nil
+            return
+        }
+        guard let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty else {
+            viewModel.coverPickerItem = nil
+            viewModel.coverImageData = nil
+            return
+        }
+        viewModel.coverImageData = data
+    }
+}
+
+/// Content-only view for the create flow: no property wrappers, so safe to create
+/// inside fullScreenCover/sheet. Host passes viewModel; host’s @StateObject drives updates.
+private struct EventCreateContentBody: View {
+    @ObservedObject var viewModel: CreateEventViewModel
+    let authSession: AuthSessionStore
+    let onDismiss: (() -> Void)?
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 20) {
+                hostTopBar
+                hostMediaTile
+                hostFormFields
+                hostOptionsSection
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 40)
+        }
+        .background(hostCreateEventBackground)
+        .onChange(of: viewModel.coverPickerItem) { _, newItem in
+            Task {
+                await hostLoadCoverImage(from: newItem)
+            }
+        }
+        .sheet(isPresented: viewModel.binding(\.isShowingStartDatePicker)) {
+            hostDateTimePickerSheet(
+                date: viewModel.binding(\.startDate),
+                title: "Start",
+                onDone: { viewModel.setStartDate($0) }
+            )
+        }
+        .sheet(isPresented: viewModel.binding(\.isShowingEndDatePicker)) {
+            hostDateTimePickerSheet(
+                date: viewModel.binding(\.endDate),
+                title: "End",
+                onDone: { viewModel.setEndDate($0) }
+            )
+        }
+        .sheet(isPresented: viewModel.binding(\.isShowingLocationSearch)) {
+            LocationSearchView { displayName, addressLine, coordinate in
+                viewModel.selectLocation(
+                    displayName: displayName, addressLine: addressLine, coordinate: coordinate)
+                viewModel.isShowingLocationSearch = false
+            }
+        }
+        .sheet(isPresented: viewModel.binding(\.isShowingDescriptionEditor)) {
+            RichTextEditorView(text: viewModel.binding(\.descriptionText))
+        }
+        .sheet(isPresented: viewModel.binding(\.isShowingVisibilitySheet)) {
+            EventVisibilitySheetContent(
+                initialVisibility: viewModel.visibility,
+                onConfirm: {
+                    viewModel.setVisibility($0)
+                    viewModel.isShowingVisibilitySheet = false
+                },
+                onDismiss: { viewModel.isShowingVisibilitySheet = false }
+            )
+            .presentationDetents([.height(420)])
+        }
+    }
+
+    private var hostCreateEventBackground: some View {
+        (Color(lightColor: Color(uiColor: .systemGray6), darkColor: Color.white.opacity(0.06)))
+            .ignoresSafeArea()
+    }
+
+    private var hostTopBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                onDismiss?()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AppColors.primaryText)
+            .frame(width: 44, height: 44)
+            .background(hostLiquidGlassCircleBackground)
+            .clipShape(Circle())
+
+            Spacer()
+            Text("Create Event")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppColors.primaryText)
+            Spacer()
+            Button {
+                viewModel.createEvent()
+            } label: {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title2)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(viewModel.isFormValid ? AppColors.primaryText : AppColors.tertiaryText)
+            .opacity(viewModel.isFormValid ? 1 : 0.5)
+            .disabled(!viewModel.isFormValid)
+            .frame(width: 44, height: 44)
+            .background(hostLiquidGlassCircleBackground)
+            .clipShape(Circle())
+        }
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private var hostLiquidGlassCircleBackground: some View {
+        if #available(iOS 26.0, *) {
+            Color.clear.glassEffect(.regular, in: .circle)
+        } else {
+            Color.clear.background(.ultraThinMaterial, in: Circle())
+        }
+    }
+
+    private var hostMediaTile: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            ZStack {
+                if let data = viewModel.coverImageData, let uiImage = UIImage(data: data) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: side, height: side)
+                        .clipped()
+                } else {
+                    VStack(spacing: 8) {
+                        Image(systemName: "photo.badge.plus")
+                            .font(.title)
+                            .foregroundStyle(AppColors.tertiaryText)
+                        Text("Upload image")
+                            .font(.subheadline)
+                            .foregroundStyle(AppColors.secondaryText)
+                    }
+                    .frame(width: side, height: side)
+                    .background(AppColors.surface.opacity(0.5))
+                }
+            }
+            .frame(width: side, height: side)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(
+                        AppColors.divider,
+                        style: viewModel.coverImageData == nil
+                            ? StrokeStyle(lineWidth: 2, dash: [8, 4])
+                            : StrokeStyle(lineWidth: 1)
+                    )
+            }
+            .overlay(alignment: .bottomTrailing) {
+                PhotosPicker(
+                    selection: viewModel.binding(\.coverPickerItem),
+                    matching: .images
+                ) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(AppColors.primaryText)
+                        .background(Circle().fill(.ultraThinMaterial))
+                }
+                .buttonStyle(.plain)
+                .padding(12)
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+    }
+
+    private var hostFormFields: some View {
+        VStack(spacing: 12) {
+            _glassCard {
+                TextField("Event Name", text: viewModel.binding(\.eventName))
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(AppColors.primaryText)
+            }
+            _glassCard {
+                VStack(spacing: 0) {
+                    Button {
+                        viewModel.isShowingStartDatePicker = true
+                    } label: {
+                        HStack {
+                            Text("Start")
+                                .font(.subheadline)
+                                .foregroundStyle(AppColors.secondaryText)
+                            Spacer()
+                            Text(EventDateFormatter.startDateWithTime(viewModel.startDate))
+                                .font(.subheadline)
+                                .foregroundStyle(AppColors.primaryText)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(AppColors.tertiaryText)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 16)
+                        .contentShape(Rectangle())
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                    Divider()
+                        .background(AppColors.divider)
+                    Button {
+                        viewModel.isShowingEndDatePicker = true
+                    } label: {
+                        HStack {
+                            Text("End")
+                                .font(.subheadline)
+                                .foregroundStyle(AppColors.secondaryText)
+                            Spacer()
+                            Text(EventDateFormatter.timeOnly(viewModel.endDate))
+                                .font(.subheadline)
+                                .foregroundStyle(AppColors.primaryText)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(AppColors.tertiaryText)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 16)
+                        .contentShape(Rectangle())
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.vertical, 4)
+            }
+            _glassCard {
+                Button {
+                    viewModel.isShowingLocationSearch = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "mappin.circle.fill")
+                            .foregroundStyle(AppColors.tertiaryText)
+                        Text(viewModel.selectedLocation?.displayName ?? "Choose Location")
+                            .font(.subheadline)
+                            .foregroundStyle(
+                                viewModel.selectedLocation != nil
+                                    ? AppColors.primaryText : AppColors.secondaryText)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.tertiaryText)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            _glassCard {
+                Button {
+                    viewModel.isShowingDescriptionEditor = true
+                } label: {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "list.bullet")
+                            .foregroundStyle(AppColors.tertiaryText)
+                        VStack(alignment: .leading, spacing: 4) {
+                            if viewModel.descriptionText.isEmpty {
+                                Text("Add Description")
+                                    .font(.subheadline)
+                                    .foregroundStyle(AppColors.secondaryText)
+                            } else {
+                                Text(hostTruncatedDescription)
+                                    .font(.subheadline)
+                                    .foregroundStyle(AppColors.primaryText)
+                                    .lineLimit(2)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.tertiaryText)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var hostTruncatedDescription: String {
+        let t = viewModel.descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.count <= 80 { return t }
+        return String(t.prefix(80)) + "…"
+    }
+
+    private var hostOptionsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("OPTIONS")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppColors.secondaryText)
+            _glassCard {
+                Button {
+                    viewModel.isShowingVisibilitySheet = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "eye")
+                            .foregroundStyle(AppColors.tertiaryText)
+                        Text("Visibility")
+                            .font(.subheadline)
+                            .foregroundStyle(AppColors.primaryText)
+                        Spacer()
+                        Text(viewModel.visibility == .public ? "Public" : "Private")
+                            .font(.subheadline)
+                            .foregroundStyle(AppColors.secondaryText)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.tertiaryText)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func hostDateTimePickerSheet(
+        date: Binding<Date>,
+        title: String,
+        onDone: @escaping (Date) -> Void
+    ) -> some View {
+        NavigationStack {
+            MinuteIntervalDatePicker(date: date)
+                .frame(maxWidth: .infinity)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            if title == "Start" {
+                                viewModel.isShowingStartDatePicker = false
+                            } else {
+                                viewModel.isShowingEndDatePicker = false
+                            }
+                        }
+                        .foregroundStyle(AppColors.primaryText)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            onDone(date.wrappedValue)
+                            if title == "Start" {
+                                viewModel.isShowingStartDatePicker = false
+                            } else {
+                                viewModel.isShowingEndDatePicker = false
+                            }
+                        }
+                        .foregroundStyle(AppColors.primaryText)
+                    }
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.fraction(1.0 / 3.0)])
+    }
+
+    private func hostLoadCoverImage(from item: PhotosPickerItem?) async {
+        guard let item = item else {
+            viewModel.coverImageData = nil
+            return
+        }
+        guard let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty else {
+            viewModel.coverPickerItem = nil
+            viewModel.coverImageData = nil
+            return
+        }
+        viewModel.coverImageData = data
+    }
+}
+
+/// Host used when presenting the create flow in fullScreenCover. Owns the view model;
+/// body shows EventCreateContentBody (no property wrappers) so creation is safe.
+@MainActor
+struct EventCreateSheetHost: View {
+    let authSession: AuthSessionStore
+    let onCreated: (Event) -> Void
+    let onDismiss: () -> Void
+
+    @StateObject private var viewModel: CreateEventViewModel
+
+    init(
+        authSession: AuthSessionStore,
+        onCreated: @escaping (Event) -> Void,
+        onDismiss: @escaping () -> Void
     ) {
-        (
-            item.placemark.postalAddress,
-            item.placemark.locality,
-            item.placemark.subAdministrativeArea
+        self.authSession = authSession
+        self.onCreated = onCreated
+        self.onDismiss = onDismiss
+        _viewModel = StateObject(
+            wrappedValue: CreateEventViewModel(authSession: authSession, onCreated: onCreated)
         )
     }
 
-    /// Rounds a date to the nearest 15-minute boundary (e.g. 10:07 → 10:00, 10:08 → 10:15).
-    static func roundToFifteenMinutes(_ date: Date) -> Date {
-        let calendar = Calendar.current
-        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
-        guard let m = components.minute else { return date }
-        let roundedMinute = (m / 15) * 15
-        return calendar.date(
-            from: DateComponents(
-                year: components.year,
-                month: components.month,
-                day: components.day,
-                hour: components.hour,
-                minute: roundedMinute
-            )
-        ) ?? date
-    }
-
-    func loadImageFromSelectedItem() async {
-        guard let item = selectedImageItems.first else {
-            selectedImageData = nil
-            return
-        }
-        guard let data = try? await item.loadTransferable(type: Data.self) else {
-            selectedImageData = nil
-            return
-        }
-        if data.count > Self.maxImageBytes {
-            selectedImageItems = []
-            selectedImageData = nil
-            print("[EventCreate] Image too large (\(data.count) bytes, max \(Self.maxImageBytes))")
-            return
-        }
-        selectedImageData = data
-    }
-
-    var availableCategories: [String] {
-        EventCategories.all
-    }
-
-    var canCreate: Bool {
-        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-        guard !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return false
-        }
-        guard let addressLine, !addressLine.isEmpty else { return false }
-        guard !venueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return false
-        }
-        guard selectedImageData != nil else { return false }
-        guard !about.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-        if endDate <= startDate { return false }
-        return true
-    }
-
-    func selectSuggestion(_ suggestion: AddressSuggestion) async {
-        addressSearch.clearSuggestions()
-        do {
-            let item = try await addressSearch.resolve(suggestion)
-
-            let formattedAddress: String? = {
-                // Prefer CNPostalAddress when available and compose a single-line string.
-                let postal = Self.postalAddress(from: item)
-                if let postal = postal {
-                    var components: [String] = []
-                    // Street (e.g., "1 Infinite Loop")
-                    if !postal.street.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        components.append(postal.street)
-                    }
-                    // City/locality
-                    if !postal.city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        components.append(postal.city)
-                    }
-                    // State/region
-                    if !postal.state.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        components.append(postal.state)
-                    }
-                    // Postal code
-                    if !postal.postalCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        components.append(postal.postalCode)
-                    }
-                    // Country
-                    if !postal.country.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        components.append(postal.country)
-                    }
-                    let line = components.joined(separator: ", ")
-                    if !line.isEmpty { return line }
-                }
-
-                // Fall back to MapKit-provided title/subtitle.
-                let fallback = "\(suggestion.title) \(suggestion.subtitle)".trimmingCharacters(
-                    in: .whitespaces)
-                return fallback.isEmpty ? nil : fallback
-            }()
-
-            let bestAddress =
-                formattedAddress
-                ?? "\(suggestion.title) \(suggestion.subtitle)".trimmingCharacters(in: .whitespaces)
-
-            addressLine = bestAddress
-
-            // item.location is non-optional in modern APIs; assign directly.
-            coordinate = item.location.coordinate
-
-            let derivedNeighborhood: String? = {
-                if let postal = Self.postalAddress(from: item) {
-                    let city = postal.city.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !city.isEmpty { return city }
-                }
-                let (_, locality, subAdmin) = Self.addressComponents(from: item)
-                if let locality = locality,
-                    !locality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                {
-                    return locality
-                }
-                if let subAdmin = subAdmin,
-                    !subAdmin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                {
-                    return subAdmin
-                }
-                return nil
-            }()
-            neighborhood = derivedNeighborhood
-
-            addressQuery = bestAddress
-            addressSearch.clearSuggestions()
-
-            if venueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                venueName = item.name ?? suggestion.title
-            }
-        } catch {
-            print("[EventCreate] Address selection failed: \(error)")
-        }
-    }
-
-    func createEventAndDismiss(dismiss: DismissAction) async {
-        guard !isSaving else { return }
-        guard let addressLine else { return }
-        guard let imageData = selectedImageData else { return }
-        adjustEndDateIfNeeded()
-
-        isSaving = true
-        defer { isSaving = false }
-
-        do {
-            let imageURL = try await eventImageUploadService.upload(imageData)
-            let ownerID = authSession.userID
-            let draft = EventDraft(
-                ownerID: ownerID,
-                title: title,
-                category: category,
-                startDate: startDate,
-                endDate: endDate,
-                venueName: venueName,
-                addressLine: addressLine,
-                neighborhood: neighborhood,
-                latitude: coordinate?.latitude,
-                longitude: coordinate?.longitude,
-                imageURL: imageURL.absoluteString,
-                about: about,
-                isFeatured: false,
-                visibility: .public
-            )
-
-            _ = try await eventRepository.createEvent(draft)
-            onCreated()
-            dismiss()
-        } catch {
-            print("[EventCreate] Create event failed: \(error)")
-        }
-    }
-
-    private func adjustEndDateIfNeeded(force: Bool = false) {
-        // When start changes, set end to start + 2h (15-min rounded). Don't overwrite user-chosen end unless invalid.
-        let defaultEnd = Self.roundToFifteenMinutes(startDate.addingTimeInterval(2 * 60 * 60))
-
-        if force || (!hasUserEditedEndDate) || (endDate <= startDate) {
-            isAutoAdjustingEndDate = true
-            endDate = defaultEnd
-            isAutoAdjustingEndDate = false
-        }
+    var body: some View {
+        EventCreateContentBody(
+            viewModel: viewModel,
+            authSession: authSession,
+            onDismiss: onDismiss
+        )
     }
 }
 
 #Preview {
+    let previewAuth = AuthSessionStore(authRepository: PreviewAuthRepository())
     EventCreateView(
-        eventRepository: MockEventRepository(),
-        authSession: AuthSessionStore(authRepository: PreviewAuthRepository()),
-        eventImageUploadService: MockEventImageUploadService()
+        viewModel: CreateEventViewModel(authSession: previewAuth, onCreated: { _ in }),
+        authSession: previewAuth
     )
 }
