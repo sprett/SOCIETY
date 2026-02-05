@@ -415,9 +415,13 @@ struct EventCreateView: View {
             )
         }
         .sheet(isPresented: $viewModel.isShowingLocationSearch) {
-            LocationSearchView { displayName, addressLine, coordinate in
+            LocationSearchView { displayName, addressLine, neighborhood, coordinate in
                 viewModel.selectLocation(
-                    displayName: displayName, addressLine: addressLine, coordinate: coordinate)
+                    displayName: displayName,
+                    addressLine: addressLine,
+                    neighborhood: neighborhood,
+                    coordinate: coordinate
+                )
                 viewModel.isShowingLocationSearch = false
             }
         }
@@ -477,8 +481,15 @@ struct EventCreateView: View {
             Button {
                 Task { await viewModel.createEvent() }
             } label: {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title2)
+                Group {
+                    if viewModel.isCreating {
+                        ProgressView()
+                            .tint(AppColors.primaryText)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title2)
+                    }
+                }
             }
             .buttonStyle(.plain)
             .foregroundStyle(
@@ -492,6 +503,16 @@ struct EventCreateView: View {
             .clipShape(Circle())
         }
         .padding(.vertical, 8)
+        .alert("Couldn't create event", isPresented: viewModel.binding(\.isCreateErrorPresented)) {
+            Button("OK") {
+                viewModel.createErrorMessage = nil
+                viewModel.isCreateErrorPresented = false
+            }
+        } message: {
+            if let msg = viewModel.createErrorMessage {
+                Text(msg)
+            }
+        }
     }
 
     @ViewBuilder
@@ -678,9 +699,13 @@ private struct EventCreateContentBody: View {
             )
         }
         .sheet(isPresented: viewModel.binding(\.isShowingLocationSearch)) {
-            LocationSearchView { displayName, addressLine, coordinate in
+            LocationSearchView { displayName, addressLine, neighborhood, coordinate in
                 viewModel.selectLocation(
-                    displayName: displayName, addressLine: addressLine, coordinate: coordinate)
+                    displayName: displayName,
+                    addressLine: addressLine,
+                    neighborhood: neighborhood,
+                    coordinate: coordinate
+                )
                 viewModel.isShowingLocationSearch = false
             }
         }
@@ -737,8 +762,15 @@ private struct EventCreateContentBody: View {
             Button {
                 Task { await viewModel.createEvent() }
             } label: {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title2)
+                Group {
+                    if viewModel.isCreating {
+                        ProgressView()
+                            .tint(AppColors.primaryText)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title2)
+                    }
+                }
             }
             .buttonStyle(.plain)
             .foregroundStyle(
@@ -752,6 +784,16 @@ private struct EventCreateContentBody: View {
             .clipShape(Circle())
         }
         .padding(.vertical, 8)
+        .alert("Couldn't create event", isPresented: viewModel.binding(\.isCreateErrorPresented)) {
+            Button("OK") {
+                viewModel.createErrorMessage = nil
+                viewModel.isCreateErrorPresented = false
+            }
+        } message: {
+            if let msg = viewModel.createErrorMessage {
+                Text(msg)
+            }
+        }
     }
 
     @ViewBuilder

@@ -8,15 +8,19 @@ import CoreLocation
 import Foundation
 import PhotosUI
 import SwiftUI
+import UIKit
 
 struct SelectedLocation: Equatable {
     let displayName: String
     let addressLine: String?
+    /// Neighborhood name for list/DB (e.g. Grünerløkka), from placemark subLocality/locality.
+    let neighborhood: String?
     let coordinate: CLLocationCoordinate2D
 
     static func == (lhs: SelectedLocation, rhs: SelectedLocation) -> Bool {
         lhs.displayName == rhs.displayName
             && lhs.addressLine == rhs.addressLine
+            && lhs.neighborhood == rhs.neighborhood
             && lhs.coordinate.latitude == rhs.coordinate.latitude
             && lhs.coordinate.longitude == rhs.coordinate.longitude
     }
@@ -76,11 +80,15 @@ final class CreateEventViewModel: ObservableObject {
     }
 
     func selectLocation(
-        displayName: String, addressLine: String?, coordinate: CLLocationCoordinate2D
+        displayName: String,
+        addressLine: String?,
+        neighborhood: String?,
+        coordinate: CLLocationCoordinate2D
     ) {
         selectedLocation = SelectedLocation(
             displayName: displayName,
             addressLine: addressLine,
+            neighborhood: neighborhood,
             coordinate: coordinate
         )
     }
@@ -113,7 +121,6 @@ final class CreateEventViewModel: ObservableObject {
         createErrorMessage = nil
         defer { isCreating = false }
 
-        let neighborhood = location.addressLine ?? location.displayName
         let addressLine = location.addressLine ?? ""
 
         var imageURL: String?
@@ -136,7 +143,7 @@ final class CreateEventViewModel: ObservableObject {
             endDate: endDate,
             venueName: location.displayName,
             addressLine: addressLine,
-            neighborhood: neighborhood.isEmpty ? nil : neighborhood,
+            neighborhood: location.neighborhood,
             latitude: location.coordinate.latitude,
             longitude: location.coordinate.longitude,
             imageURL: imageURL,
