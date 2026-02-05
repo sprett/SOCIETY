@@ -29,8 +29,11 @@ final class LocationSearchViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
+    /// Returns displayName, full address line, neighborhood (e.g. Grünerløkka), and coordinate.
+    /// Neighborhood comes from subLocality (district) or locality (city) so it matches existing events.
     func resolve(_ suggestion: AddressSuggestion) async -> (
-        displayName: String, addressLine: String?, coordinate: CLLocationCoordinate2D
+        displayName: String, addressLine: String?, neighborhood: String?,
+        coordinate: CLLocationCoordinate2D
     )? {
         isResolving = true
         errorMessage = nil
@@ -50,7 +53,14 @@ final class LocationSearchViewModel: ObservableObject {
                 return parts.isEmpty
                     ? (placemark.title ?? placemark.subtitle) : parts.joined(separator: ", ")
             }()
-            return (displayName: displayName, addressLine: addressLine, coordinate: coordinate)
+            // Neighborhood for DB/list display: subLocality (e.g. Grünerløkka) or locality (e.g. Oslo).
+            let neighborhood: String? = (placemark.subLocality ?? placemark.locality)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .flatMap { $0.isEmpty ? nil : $0 }
+            return (
+                displayName: displayName, addressLine: addressLine, neighborhood: neighborhood,
+                coordinate: coordinate
+            )
         } catch {
             errorMessage = error.localizedDescription
             return nil

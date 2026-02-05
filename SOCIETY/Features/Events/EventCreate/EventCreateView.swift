@@ -415,9 +415,13 @@ struct EventCreateView: View {
             )
         }
         .sheet(isPresented: $viewModel.isShowingLocationSearch) {
-            LocationSearchView { displayName, addressLine, coordinate in
+            LocationSearchView { displayName, addressLine, neighborhood, coordinate in
                 viewModel.selectLocation(
-                    displayName: displayName, addressLine: addressLine, coordinate: coordinate)
+                    displayName: displayName,
+                    addressLine: addressLine,
+                    neighborhood: neighborhood,
+                    coordinate: coordinate
+                )
                 viewModel.isShowingLocationSearch = false
             }
         }
@@ -467,18 +471,38 @@ struct EventCreateView: View {
             Button {
                 viewModel.createEvent()
             } label: {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title2)
+                Group {
+                    if viewModel.isCreating {
+                        ProgressView()
+                            .tint(AppColors.primaryText)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title2)
+                    }
+                }
             }
             .buttonStyle(.plain)
             .foregroundStyle(viewModel.isFormValid ? AppColors.primaryText : AppColors.tertiaryText)
-            .opacity(viewModel.isFormValid ? 1 : 0.5)
-            .disabled(!viewModel.isFormValid)
+            .opacity(viewModel.isFormValid && !viewModel.isCreating ? 1 : 0.5)
+            .disabled(!viewModel.isFormValid || viewModel.isCreating)
             .frame(width: 44, height: 44)
             .background(liquidGlassCircleBackground)
             .clipShape(Circle())
         }
         .padding(.vertical, 8)
+        .alert(
+            "Could not create event",
+            isPresented: Binding(
+                get: { viewModel.createError != nil },
+                set: { if !$0 { viewModel.createError = nil } }
+            )
+        ) {
+            Button("OK") { viewModel.createError = nil }
+        } message: {
+            if let error = viewModel.createError {
+                Text(error.localizedDescription)
+            }
+        }
     }
 
     @ViewBuilder
@@ -665,9 +689,13 @@ private struct EventCreateContentBody: View {
             )
         }
         .sheet(isPresented: viewModel.binding(\.isShowingLocationSearch)) {
-            LocationSearchView { displayName, addressLine, coordinate in
+            LocationSearchView { displayName, addressLine, neighborhood, coordinate in
                 viewModel.selectLocation(
-                    displayName: displayName, addressLine: addressLine, coordinate: coordinate)
+                    displayName: displayName,
+                    addressLine: addressLine,
+                    neighborhood: neighborhood,
+                    coordinate: coordinate
+                )
                 viewModel.isShowingLocationSearch = false
             }
         }
@@ -714,18 +742,38 @@ private struct EventCreateContentBody: View {
             Button {
                 viewModel.createEvent()
             } label: {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title2)
+                Group {
+                    if viewModel.isCreating {
+                        ProgressView()
+                            .tint(AppColors.primaryText)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title2)
+                    }
+                }
             }
             .buttonStyle(.plain)
             .foregroundStyle(viewModel.isFormValid ? AppColors.primaryText : AppColors.tertiaryText)
-            .opacity(viewModel.isFormValid ? 1 : 0.5)
-            .disabled(!viewModel.isFormValid)
+            .opacity(viewModel.isFormValid && !viewModel.isCreating ? 1 : 0.5)
+            .disabled(!viewModel.isFormValid || viewModel.isCreating)
             .frame(width: 44, height: 44)
             .background(hostLiquidGlassCircleBackground)
             .clipShape(Circle())
         }
         .padding(.vertical, 8)
+        .alert(
+            "Could not create event",
+            isPresented: Binding(
+                get: { viewModel.createError != nil },
+                set: { if !$0 { viewModel.createError = nil } }
+            )
+        ) {
+            Button("OK") { viewModel.createError = nil }
+        } message: {
+            if let error = viewModel.createError {
+                Text(error.localizedDescription)
+            }
+        }
     }
 
     @ViewBuilder
@@ -992,6 +1040,9 @@ private struct EventCreateContentBody: View {
 @MainActor
 struct EventCreateSheetHost: View {
     let authSession: AuthSessionStore
+    let eventRepository: any EventRepository
+    let eventImageUploadService: any EventImageUploadService
+    let rsvpRepository: any RsvpRepository
     let onCreated: (Event) -> Void
     let onDismiss: () -> Void
 
@@ -999,14 +1050,26 @@ struct EventCreateSheetHost: View {
 
     init(
         authSession: AuthSessionStore,
+        eventRepository: any EventRepository,
+        eventImageUploadService: any EventImageUploadService,
+        rsvpRepository: any RsvpRepository,
         onCreated: @escaping (Event) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.authSession = authSession
+        self.eventRepository = eventRepository
+        self.eventImageUploadService = eventImageUploadService
+        self.rsvpRepository = rsvpRepository
         self.onCreated = onCreated
         self.onDismiss = onDismiss
         _viewModel = StateObject(
-            wrappedValue: CreateEventViewModel(authSession: authSession, onCreated: onCreated)
+            wrappedValue: CreateEventViewModel(
+                authSession: authSession,
+                eventRepository: eventRepository,
+                eventImageUploadService: eventImageUploadService,
+                rsvpRepository: rsvpRepository,
+                onCreated: onCreated
+            )
         )
     }
 
@@ -1022,7 +1085,13 @@ struct EventCreateSheetHost: View {
 #Preview {
     let previewAuth = AuthSessionStore(authRepository: PreviewAuthRepository())
     EventCreateView(
-        viewModel: CreateEventViewModel(authSession: previewAuth, onCreated: { _ in }),
+        viewModel: CreateEventViewModel(
+            authSession: previewAuth,
+            eventRepository: MockEventRepository(),
+            eventImageUploadService: MockEventImageUploadService(),
+            rsvpRepository: MockRsvpRepository(),
+            onCreated: { _ in }
+        ),
         authSession: previewAuth
     )
 }
