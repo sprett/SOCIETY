@@ -62,7 +62,9 @@ final class SupabaseEventRepository: EventRepository {
             .execute()
             .value
 
-        return row.toDomain()
+        let ownerProfiles = await fetchOwnerProfiles(for: [row])
+        let ownerProfile = row.ownerID.flatMap { ownerProfiles[$0] }
+        return row.toDomain(ownerProfile: ownerProfile)
     }
 
     func updateEventCover(eventID: UUID, imageURL: String) async throws {

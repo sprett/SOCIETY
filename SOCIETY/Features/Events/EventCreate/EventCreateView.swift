@@ -439,6 +439,16 @@ struct EventCreateView: View {
             )
             .presentationDetents([.height(420)])
         }
+        .alert("Couldn't create event", isPresented: viewModel.binding(\.isCreateErrorPresented)) {
+            Button("OK") {
+                viewModel.createErrorMessage = nil
+                viewModel.isCreateErrorPresented = false
+            }
+        } message: {
+            if let msg = viewModel.createErrorMessage {
+                Text(msg)
+            }
+        }
     }
 
     private var createEventBackground: some View {
@@ -469,7 +479,7 @@ struct EventCreateView: View {
             Spacer()
 
             Button {
-                viewModel.createEvent()
+                Task { await viewModel.createEvent() }
             } label: {
                 Group {
                     if viewModel.isCreating {
@@ -482,7 +492,10 @@ struct EventCreateView: View {
                 }
             }
             .buttonStyle(.plain)
-            .foregroundStyle(viewModel.isFormValid ? AppColors.primaryText : AppColors.tertiaryText)
+            .foregroundStyle(
+                viewModel.isFormValid && !viewModel.isCreating
+                    ? AppColors.primaryText : AppColors.tertiaryText
+            )
             .opacity(viewModel.isFormValid && !viewModel.isCreating ? 1 : 0.5)
             .disabled(!viewModel.isFormValid || viewModel.isCreating)
             .frame(width: 44, height: 44)
@@ -490,17 +503,14 @@ struct EventCreateView: View {
             .clipShape(Circle())
         }
         .padding(.vertical, 8)
-        .alert(
-            "Could not create event",
-            isPresented: Binding(
-                get: { viewModel.createError != nil },
-                set: { if !$0 { viewModel.createError = nil } }
-            )
-        ) {
-            Button("OK") { viewModel.createError = nil }
+        .alert("Couldn't create event", isPresented: viewModel.binding(\.isCreateErrorPresented)) {
+            Button("OK") {
+                viewModel.createErrorMessage = nil
+                viewModel.isCreateErrorPresented = false
+            }
         } message: {
-            if let error = viewModel.createError {
-                Text(error.localizedDescription)
+            if let msg = viewModel.createErrorMessage {
+                Text(msg)
             }
         }
     }
@@ -713,6 +723,16 @@ private struct EventCreateContentBody: View {
             )
             .presentationDetents([.height(420)])
         }
+        .alert("Couldn't create event", isPresented: viewModel.binding(\.isCreateErrorPresented)) {
+            Button("OK") {
+                viewModel.createErrorMessage = nil
+                viewModel.isCreateErrorPresented = false
+            }
+        } message: {
+            if let msg = viewModel.createErrorMessage {
+                Text(msg)
+            }
+        }
     }
 
     private var hostCreateEventBackground: some View {
@@ -740,7 +760,7 @@ private struct EventCreateContentBody: View {
                 .foregroundStyle(AppColors.primaryText)
             Spacer()
             Button {
-                viewModel.createEvent()
+                Task { await viewModel.createEvent() }
             } label: {
                 Group {
                     if viewModel.isCreating {
@@ -753,7 +773,10 @@ private struct EventCreateContentBody: View {
                 }
             }
             .buttonStyle(.plain)
-            .foregroundStyle(viewModel.isFormValid ? AppColors.primaryText : AppColors.tertiaryText)
+            .foregroundStyle(
+                viewModel.isFormValid && !viewModel.isCreating
+                    ? AppColors.primaryText : AppColors.tertiaryText
+            )
             .opacity(viewModel.isFormValid && !viewModel.isCreating ? 1 : 0.5)
             .disabled(!viewModel.isFormValid || viewModel.isCreating)
             .frame(width: 44, height: 44)
@@ -761,17 +784,14 @@ private struct EventCreateContentBody: View {
             .clipShape(Circle())
         }
         .padding(.vertical, 8)
-        .alert(
-            "Could not create event",
-            isPresented: Binding(
-                get: { viewModel.createError != nil },
-                set: { if !$0 { viewModel.createError = nil } }
-            )
-        ) {
-            Button("OK") { viewModel.createError = nil }
+        .alert("Couldn't create event", isPresented: viewModel.binding(\.isCreateErrorPresented)) {
+            Button("OK") {
+                viewModel.createErrorMessage = nil
+                viewModel.isCreateErrorPresented = false
+            }
         } message: {
-            if let error = viewModel.createError {
-                Text(error.localizedDescription)
+            if let msg = viewModel.createErrorMessage {
+                Text(msg)
             }
         }
     }
