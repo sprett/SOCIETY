@@ -27,6 +27,9 @@ struct CreateEventDemoView: View {
         .fullScreenCover(isPresented: $isCreatePresented) {
             EventCreateSheetHost(
                 authSession: authSession,
+                eventRepository: MockEventRepository(),
+                eventImageUploadService: MockEventImageUploadService(),
+                rsvpRepository: MockRsvpRepository(),
                 onCreated: { event in
                     createdEvent = event
                     isCreatePresented = false

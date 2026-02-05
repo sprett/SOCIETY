@@ -435,6 +435,16 @@ struct EventCreateView: View {
             )
             .presentationDetents([.height(420)])
         }
+        .alert("Couldn't create event", isPresented: viewModel.binding(\.isCreateErrorPresented)) {
+            Button("OK") {
+                viewModel.createErrorMessage = nil
+                viewModel.isCreateErrorPresented = false
+            }
+        } message: {
+            if let msg = viewModel.createErrorMessage {
+                Text(msg)
+            }
+        }
     }
 
     private var createEventBackground: some View {
@@ -465,15 +475,18 @@ struct EventCreateView: View {
             Spacer()
 
             Button {
-                viewModel.createEvent()
+                Task { await viewModel.createEvent() }
             } label: {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title2)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(viewModel.isFormValid ? AppColors.primaryText : AppColors.tertiaryText)
-            .opacity(viewModel.isFormValid ? 1 : 0.5)
-            .disabled(!viewModel.isFormValid)
+            .foregroundStyle(
+                viewModel.isFormValid && !viewModel.isCreating
+                    ? AppColors.primaryText : AppColors.tertiaryText
+            )
+            .opacity(viewModel.isFormValid && !viewModel.isCreating ? 1 : 0.5)
+            .disabled(!viewModel.isFormValid || viewModel.isCreating)
             .frame(width: 44, height: 44)
             .background(liquidGlassCircleBackground)
             .clipShape(Circle())
@@ -685,6 +698,16 @@ private struct EventCreateContentBody: View {
             )
             .presentationDetents([.height(420)])
         }
+        .alert("Couldn't create event", isPresented: viewModel.binding(\.isCreateErrorPresented)) {
+            Button("OK") {
+                viewModel.createErrorMessage = nil
+                viewModel.isCreateErrorPresented = false
+            }
+        } message: {
+            if let msg = viewModel.createErrorMessage {
+                Text(msg)
+            }
+        }
     }
 
     private var hostCreateEventBackground: some View {
@@ -712,15 +735,18 @@ private struct EventCreateContentBody: View {
                 .foregroundStyle(AppColors.primaryText)
             Spacer()
             Button {
-                viewModel.createEvent()
+                Task { await viewModel.createEvent() }
             } label: {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title2)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(viewModel.isFormValid ? AppColors.primaryText : AppColors.tertiaryText)
-            .opacity(viewModel.isFormValid ? 1 : 0.5)
-            .disabled(!viewModel.isFormValid)
+            .foregroundStyle(
+                viewModel.isFormValid && !viewModel.isCreating
+                    ? AppColors.primaryText : AppColors.tertiaryText
+            )
+            .opacity(viewModel.isFormValid && !viewModel.isCreating ? 1 : 0.5)
+            .disabled(!viewModel.isFormValid || viewModel.isCreating)
             .frame(width: 44, height: 44)
             .background(hostLiquidGlassCircleBackground)
             .clipShape(Circle())
@@ -992,6 +1018,9 @@ private struct EventCreateContentBody: View {
 @MainActor
 struct EventCreateSheetHost: View {
     let authSession: AuthSessionStore
+    let eventRepository: any EventRepository
+    let eventImageUploadService: any EventImageUploadService
+    let rsvpRepository: any RsvpRepository
     let onCreated: (Event) -> Void
     let onDismiss: () -> Void
 
@@ -999,14 +1028,26 @@ struct EventCreateSheetHost: View {
 
     init(
         authSession: AuthSessionStore,
+        eventRepository: any EventRepository,
+        eventImageUploadService: any EventImageUploadService,
+        rsvpRepository: any RsvpRepository,
         onCreated: @escaping (Event) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.authSession = authSession
+        self.eventRepository = eventRepository
+        self.eventImageUploadService = eventImageUploadService
+        self.rsvpRepository = rsvpRepository
         self.onCreated = onCreated
         self.onDismiss = onDismiss
         _viewModel = StateObject(
-            wrappedValue: CreateEventViewModel(authSession: authSession, onCreated: onCreated)
+            wrappedValue: CreateEventViewModel(
+                authSession: authSession,
+                eventRepository: eventRepository,
+                eventImageUploadService: eventImageUploadService,
+                rsvpRepository: rsvpRepository,
+                onCreated: onCreated
+            )
         )
     }
 
@@ -1022,7 +1063,13 @@ struct EventCreateSheetHost: View {
 #Preview {
     let previewAuth = AuthSessionStore(authRepository: PreviewAuthRepository())
     EventCreateView(
-        viewModel: CreateEventViewModel(authSession: previewAuth, onCreated: { _ in }),
+        viewModel: CreateEventViewModel(
+            authSession: previewAuth,
+            eventRepository: MockEventRepository(),
+            eventImageUploadService: MockEventImageUploadService(),
+            rsvpRepository: MockRsvpRepository(),
+            onCreated: { _ in }
+        ),
         authSession: previewAuth
     )
 }
