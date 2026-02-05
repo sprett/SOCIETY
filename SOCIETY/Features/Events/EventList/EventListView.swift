@@ -23,7 +23,6 @@ struct EventListView: View {
     @State private var selectedEvent: Event?
     @State private var isCreatePresented: Bool = false
     @State private var isProfilePresented: Bool = false
-    @State private var createSheetDetent: PresentationDetent = .large
 
     init(
         eventRepository: any EventRepository = MockEventRepository(),
@@ -114,6 +113,17 @@ struct EventListView: View {
             }
         }
         .animation(.easeInOut(duration: 0.18), value: isEventDetailPresented)
+        .fullScreenCover(isPresented: $isCreatePresented) {
+            EventCreateSheetHost(
+                authSession: authSession,
+                onCreated: { createdEvent in
+                    selectedEvent = createdEvent
+                    viewModel.refresh()
+                    isCreatePresented = false
+                },
+                onDismiss: { isCreatePresented = false }
+            )
+        }
         .sheet(item: $selectedEvent) { event in
             EventDetailView(
                 event: event,
@@ -128,16 +138,6 @@ struct EventListView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $isCreatePresented) {
-            EventCreateView(
-                eventRepository: eventRepository,
-                authSession: authSession,
-                eventImageUploadService: eventImageUploadService,
-                onCreated: { viewModel.refresh() }
-            )
-            .presentationDetents([.large], selection: $createSheetDetent)
-            .presentationDragIndicator(.visible)
-        }
         .sheet(isPresented: $isProfilePresented) {
             SettingsView(
                 authSession: authSession,
@@ -146,11 +146,6 @@ struct EventListView: View {
             .environmentObject(authSession)
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
-        }
-        .onChange(of: isCreatePresented) { _, isPresented in
-            if isPresented {
-                createSheetDetent = .large
-            }
         }
         .onChange(of: requestCreate) { _, requested in
             if requested {
