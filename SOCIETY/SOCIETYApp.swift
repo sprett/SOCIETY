@@ -54,7 +54,18 @@ struct SOCIETYApp: App {
         let appearance = UITabBarAppearance()
         appearance.configureWithTransparentBackground()
         appearance.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.8)
+        // Unselected: outline style (gray)
+        appearance.stackedLayoutAppearance.normal.iconColor = .secondaryLabel
+        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+            .foregroundColor: UIColor.secondaryLabel
+        ]
+        // Selected: solid style (primary color, not blue)
+        appearance.stackedLayoutAppearance.selected.iconColor = .label
+        appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+            .foregroundColor: UIColor.label
+        ]
         UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().tintColor = .label
         if #available(iOS 15.0, *) {
             UITabBar.appearance().scrollEdgeAppearance = appearance
         }

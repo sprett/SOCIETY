@@ -32,7 +32,8 @@ struct MainTabView: View {
                 }
             )
             .tabItem {
-                Label("Discover", systemImage: "magnifyingglass")
+                Label("Discover", systemImage: "magnifyingglass.circle")
+                    .environment(\.symbolVariants, selectedTab == 0 ? .fill : .none)
             }
             .tag(0)
 
@@ -47,7 +48,8 @@ struct MainTabView: View {
                 requestCreate: $requestCreate
             )
             .tabItem {
-                Label("Home", systemImage: "house.fill")
+                Label("Home", systemImage: "house")
+                    .environment(\.symbolVariants, selectedTab == 1 ? .fill : .none)
             }
             .tag(1)
 
@@ -60,7 +62,8 @@ struct MainTabView: View {
                 onDiscoverTapped: { selectedTab = 0 }
             )
             .tabItem {
-                Label("Feed", systemImage: "list.bullet")
+                Label("Feed", systemImage: "list.bullet.rectangle")
+                    .environment(\.symbolVariants, selectedTab == 2 ? .fill : .none)
             }
             .tag(2)
         }
