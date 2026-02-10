@@ -16,6 +16,9 @@ final class AuthSessionStore: ObservableObject {
     @Published private(set) var userName: String?
     @Published private(set) var profileImageURL: String?
 
+    /// Cached full profile; when set, display name/email/avatar are derived from it.
+    @Published private(set) var currentProfile: UserProfile?
+
     private let authRepository: any AuthRepository
 
     init(authRepository: any AuthRepository) {
@@ -26,7 +29,11 @@ final class AuthSessionStore: ObservableObject {
     var isAuthenticated: Bool { userID != nil }
 
     func refresh() async {
-        userID = await authRepository.currentUserID()
+        let newUserID = await authRepository.currentUserID()
+        userID = newUserID
+        if newUserID == nil {
+            currentProfile = nil
+        }
         userEmail = await authRepository.currentUserEmail()
         userName = await authRepository.currentUserName()
         profileImageURL = await authRepository.currentUserProfileImageURL()
@@ -57,6 +64,11 @@ final class AuthSessionStore: ObservableObject {
         await refresh()
     }
 
+    func deleteAccount() async throws {
+        try await authRepository.deleteAccount()
+        await refresh()
+    }
+
     func updateUserName(_ name: String) async throws {
         try await authRepository.updateUserName(name)
         await refresh()
@@ -64,7 +76,21 @@ final class AuthSessionStore: ObservableObject {
 
     func updateProfileImage(_ imageURL: String) async throws {
         try await authRepository.updateUserProfileImage(imageURL)
-        // Refresh immediately - currentUserProfileImageURL now fetches fresh user data
         await refresh()
+    }
+
+    func updateUserEmail(_ email: String) async throws {
+        try await authRepository.updateUserEmail(email)
+        await refresh()
+    }
+
+    /// Updates cached profile and derived display values (userName, userEmail, profileImageURL).
+    func setCurrentProfile(_ profile: UserProfile?) {
+        currentProfile = profile
+        if let p = profile {
+            userName = p.fullName
+            userEmail = p.email
+            profileImageURL = p.profileImageURL
+        }
     }
 }

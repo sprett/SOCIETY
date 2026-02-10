@@ -14,6 +14,8 @@ struct FeedView: View {
     @State private var isProfilePresented: Bool = false
 
     private let eventRepository: any EventRepository
+    private let profileRepository: any ProfileRepository
+    private let notificationSettingsRepository: any NotificationSettingsRepository
     private let rsvpRepository: any RsvpRepository
     private let eventImageUploadService: any EventImageUploadService
     private let profileImageUploadService: any ProfileImageUploadService
@@ -33,12 +35,16 @@ struct FeedView: View {
 
     init(
         eventRepository: any EventRepository = MockEventRepository(),
+        profileRepository: any ProfileRepository = MockProfileRepository(),
+        notificationSettingsRepository: any NotificationSettingsRepository = MockNotificationSettingsRepository(),
         rsvpRepository: any RsvpRepository = MockRsvpRepository(),
         eventImageUploadService: any EventImageUploadService = MockEventImageUploadService(),
         profileImageUploadService: any ProfileImageUploadService = MockProfileImageUploadService(),
         onDiscoverTapped: (() -> Void)? = nil
     ) {
         self.eventRepository = eventRepository
+        self.profileRepository = profileRepository
+        self.notificationSettingsRepository = notificationSettingsRepository
         self.rsvpRepository = rsvpRepository
         self.eventImageUploadService = eventImageUploadService
         self.profileImageUploadService = profileImageUploadService
@@ -120,6 +126,8 @@ struct FeedView: View {
         .sheet(isPresented: $isProfilePresented) {
             SettingsView(
                 authSession: authSession,
+                profileRepository: profileRepository,
+                notificationSettingsRepository: notificationSettingsRepository,
                 profileImageUploadService: profileImageUploadService
             )
             .environmentObject(authSession)
