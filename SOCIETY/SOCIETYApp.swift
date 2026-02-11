@@ -35,6 +35,8 @@ struct SOCIETYApp: App {
             self.dependencies = AppDependencies(
                 supabase: supabase,
                 authRepository: authRepository,
+                profileRepository: SupabaseProfileRepository(client: supabase),
+                notificationSettingsRepository: UserDefaultsNotificationSettingsRepository(),
                 eventRepository: SupabaseEventRepository(client: supabase),
                 rsvpRepository: SupabaseRsvpRepository(client: supabase),
                 eventImageUploadService: SupabaseEventImageUploadService(client: supabase),

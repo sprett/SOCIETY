@@ -22,6 +22,8 @@ struct MainTabView: View {
             // Discover Tab
             DiscoverView(
                 eventRepository: dependencies.eventRepository,
+                profileRepository: dependencies.profileRepository,
+                notificationSettingsRepository: dependencies.notificationSettingsRepository,
                 rsvpRepository: dependencies.rsvpRepository,
                 eventImageUploadService: dependencies.eventImageUploadService,
                 profileImageUploadService: dependencies.profileImageUploadService,
@@ -41,6 +43,8 @@ struct MainTabView: View {
             EventListView(
                 eventRepository: dependencies.eventRepository,
                 authRepository: dependencies.authRepository,
+                profileRepository: dependencies.profileRepository,
+                notificationSettingsRepository: dependencies.notificationSettingsRepository,
                 eventImageUploadService: dependencies.eventImageUploadService,
                 profileImageUploadService: dependencies.profileImageUploadService,
                 rsvpRepository: dependencies.rsvpRepository,
@@ -56,6 +60,8 @@ struct MainTabView: View {
             // Feed Tab
             FeedView(
                 eventRepository: dependencies.eventRepository,
+                profileRepository: dependencies.profileRepository,
+                notificationSettingsRepository: dependencies.notificationSettingsRepository,
                 rsvpRepository: dependencies.rsvpRepository,
                 eventImageUploadService: dependencies.eventImageUploadService,
                 profileImageUploadService: dependencies.profileImageUploadService,

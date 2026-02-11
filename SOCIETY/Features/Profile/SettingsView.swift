@@ -12,13 +12,19 @@ struct SettingsView: View {
     @EnvironmentObject private var authSession: AuthSessionStore
     @StateObject private var viewModel: SettingsViewModel
     @AppStorage(AppearanceMode.storageKey) private var appearanceMode: String = AppearanceMode.system.rawValue
+    private let profileRepository: any ProfileRepository
+    private let notificationSettingsRepository: any NotificationSettingsRepository
     private let profileImageUploadService: any ProfileImageUploadService
 
     init(
         authSession: AuthSessionStore,
+        profileRepository: any ProfileRepository,
+        notificationSettingsRepository: any NotificationSettingsRepository,
         profileImageUploadService: any ProfileImageUploadService
     ) {
         _viewModel = StateObject(wrappedValue: SettingsViewModel(authSession: authSession))
+        self.profileRepository = profileRepository
+        self.notificationSettingsRepository = notificationSettingsRepository
         self.profileImageUploadService = profileImageUploadService
     }
 
@@ -54,10 +60,10 @@ struct SettingsView: View {
                 // User profile section
                 Section {
                     NavigationLink {
-                        ProfileView(
+                        EditProfileView(
                             authSession: authSession,
-                            profileImageUploadService: profileImageUploadService,
-                            displayMode: .pushed
+                            profileRepository: profileRepository,
+                            profileImageUploadService: profileImageUploadService
                         )
                     } label: {
                         HStack(spacing: 12) {
@@ -76,13 +82,12 @@ struct SettingsView: View {
                     }
                 }
 
-                // Account Settings
+                // Account
                 Section {
                     NavigationLink {
-                        ProfileView(
+                        AccountSettingsView(
                             authSession: authSession,
-                            profileImageUploadService: profileImageUploadService,
-                            displayMode: .pushed
+                            profileRepository: profileRepository
                         )
                     } label: {
                         Label("Account Settings", systemImage: "gearshape")
@@ -93,9 +98,18 @@ struct SettingsView: View {
                 // Preferences
                 Section {
                     NavigationLink {
-                        placeholderDestination("Notifications")
+                        NotificationSettingsView(
+                            authSession: authSession,
+                            notificationSettingsRepository: notificationSettingsRepository
+                        )
                     } label: {
                         Label("Notifications", systemImage: "bell")
+                            .foregroundStyle(AppColors.primaryText)
+                    }
+                    NavigationLink {
+                        PermissionsView()
+                    } label: {
+                        Label("Permissions", systemImage: "hand.raised")
                             .foregroundStyle(AppColors.primaryText)
                     }
                     NavigationLink {
@@ -163,18 +177,14 @@ struct SettingsView: View {
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
         return "Version \(short) (\(build))"
     }
-
-    private func placeholderDestination(_ title: String) -> some View {
-        Text(title)
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-    }
 }
 
 #Preview {
     let authSession = AuthSessionStore(authRepository: PreviewAuthRepository())
     return SettingsView(
         authSession: authSession,
+        profileRepository: MockProfileRepository(),
+        notificationSettingsRepository: MockNotificationSettingsRepository(),
         profileImageUploadService: MockProfileImageUploadService()
     )
     .environmentObject(authSession)

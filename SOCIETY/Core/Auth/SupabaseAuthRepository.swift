@@ -150,6 +150,14 @@ final class SupabaseAuthRepository: AuthRepository {
         try await client.auth.signOut()
     }
 
+    /// Deletes the account via Edge Function (removes profile image, event images, events, RSVPs, then auth user), then signs out locally.
+    func deleteAccount() async throws {
+        let session = try await client.auth.session
+        client.functions.setAuth(token: session.accessToken)
+        try await client.functions.invoke("delete-account")
+        try await client.auth.signOut()
+    }
+
     func updateUserName(_ name: String) async throws {
         var metadata: [String: AnyJSON] = [:]
         metadata["full_name"] = .string(name)
@@ -160,5 +168,9 @@ final class SupabaseAuthRepository: AuthRepository {
         var metadata: [String: AnyJSON] = [:]
         metadata["profile_image_url"] = .string(imageURL)
         try await client.auth.update(user: UserAttributes(data: metadata))
+    }
+
+    func updateUserEmail(_ email: String) async throws {
+        try await client.auth.update(user: UserAttributes(data: ["email": .string(email)]))
     }
 }

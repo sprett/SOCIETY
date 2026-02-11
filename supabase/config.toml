@@ -1,0 +1,8 @@
+# SOCIETY - Supabase local/config (used by CLI for deploy settings)
+# See: https://supabase.com/docs/guides/functions/config
+
+[functions]
+# Disable gateway JWT verification for delete-account so the request reaches our code.
+# We validate the user's JWT inside the function with auth.getUser().
+[functions.delete-account]
+verify_jwt = false

@@ -15,6 +15,8 @@ struct EventListView: View {
 
     private let eventRepository: any EventRepository
     private let authRepository: any AuthRepository
+    private let profileRepository: any ProfileRepository
+    private let notificationSettingsRepository: any NotificationSettingsRepository
     private let eventImageUploadService: any EventImageUploadService
     private let profileImageUploadService: any ProfileImageUploadService
     private let rsvpRepository: any RsvpRepository
@@ -27,6 +29,8 @@ struct EventListView: View {
     init(
         eventRepository: any EventRepository = MockEventRepository(),
         authRepository: any AuthRepository = PreviewAuthRepository(),
+        profileRepository: any ProfileRepository = MockProfileRepository(),
+        notificationSettingsRepository: any NotificationSettingsRepository = MockNotificationSettingsRepository(),
         eventImageUploadService: any EventImageUploadService = MockEventImageUploadService(),
         profileImageUploadService: any ProfileImageUploadService = MockProfileImageUploadService(),
         rsvpRepository: any RsvpRepository = MockRsvpRepository(),
@@ -35,6 +39,8 @@ struct EventListView: View {
     ) {
         self.eventRepository = eventRepository
         self.authRepository = authRepository
+        self.profileRepository = profileRepository
+        self.notificationSettingsRepository = notificationSettingsRepository
         self.eventImageUploadService = eventImageUploadService
         self.profileImageUploadService = profileImageUploadService
         self.rsvpRepository = rsvpRepository
@@ -144,6 +150,8 @@ struct EventListView: View {
         .sheet(isPresented: $isProfilePresented) {
             SettingsView(
                 authSession: authSession,
+                profileRepository: profileRepository,
+                notificationSettingsRepository: notificationSettingsRepository,
                 profileImageUploadService: profileImageUploadService
             )
             .environmentObject(authSession)

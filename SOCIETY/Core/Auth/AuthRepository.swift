@@ -18,9 +18,11 @@ protocol AuthRepository {
     func signUp(email: String, password: String) async throws
     func signInWithApple(credential: ASAuthorizationAppleIDCredential) async throws
     func signOut() async throws
-    
+    func deleteAccount() async throws
+
     func updateUserName(_ name: String) async throws
     func updateUserProfileImage(_ imageURL: String) async throws
+    func updateUserEmail(_ email: String) async throws
 }
 
 final class PreviewAuthRepository: AuthRepository {
@@ -32,6 +34,8 @@ final class PreviewAuthRepository: AuthRepository {
     func signUp(email: String, password: String) async throws {}
     func signInWithApple(credential: ASAuthorizationAppleIDCredential) async throws {}
     func signOut() async throws {}
+    func deleteAccount() async throws {}
     func updateUserName(_ name: String) async throws {}
     func updateUserProfileImage(_ imageURL: String) async throws {}
+    func updateUserEmail(_ email: String) async throws {}
 }
