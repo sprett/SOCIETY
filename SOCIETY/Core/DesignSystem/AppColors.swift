@@ -51,6 +51,11 @@ enum AppColors {
         Color(lightColor: Color(.systemBlue), darkColor: Color(red: 0.36, green: 0.6, blue: 1.0))
     }
 
+    /// Onboarding subtitle accent (violet #5B21B6) to match reference design
+    static var onboardingAccent: Color {
+        Color(red: 91 / 255, green: 33 / 255, blue: 182 / 255)
+    }
+
     /// Success state color (e.g., "Going" RSVP status)
     static var success: Color {
         Color(lightColor: Color(.systemGreen), darkColor: Color(red: 0.3, green: 0.78, blue: 0.5))
@@ -115,23 +120,44 @@ enum AppColors {
         Color(red: 0.3, green: 0.7, blue: 0.7)
     }
 
-    /// Returns the category-specific color for a given category name
+    /// Returns the category-specific color for a given category name.
+    /// Covers both legacy static names and new DB-driven category names.
     static func color(for category: String) -> Color? {
         switch category {
         case "Tech":
             return tech
         case "AI":
             return ai
-        case "Climate":
+        case "Climate", "Climate & Sustainability":
             return climate
         case "Fitness":
             return fitness
-        case "Food & Drink":
+        case "Food & Drink", "Food & Drinks":
             return food
         case "Arts & Culture":
             return arts
         case "Wellness":
             return wellness
+        case "Music":
+            return Color(red: 0.88, green: 0.25, blue: 0.98)   // #E040FB
+        case "Nature & Outdoors":
+            return Color(red: 0.4, green: 0.73, blue: 0.42)    // #66BB6A
+        case "Education":
+            return Color(red: 0.26, green: 0.65, blue: 0.96)   // #42A5F5
+        case "Personal Growth":
+            return Color(red: 0.67, green: 0.28, blue: 0.74)   // #AB47BC
+        case "Social & Community":
+            return Color(red: 0.15, green: 0.78, blue: 0.85)   // #26C6DA
+        case "Business & Networking":
+            return Color(red: 0.47, green: 0.56, blue: 0.61)   // #78909C
+        case "Gaming":
+            return Color(red: 0.49, green: 0.3, blue: 1.0)     // #7C4DFF
+        case "Film":
+            return Color(red: 0.99, green: 0.85, blue: 0.21)   // #FDD835
+        case "Culture":
+            return Color(red: 0.93, green: 0.25, blue: 0.48)   // #EC407A
+        case "Family & Lifestyle":
+            return Color(red: 1.0, green: 0.65, blue: 0.15)    // #FFA726
         default:
             return nil
         }

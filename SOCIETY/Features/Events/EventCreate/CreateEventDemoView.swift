@@ -28,6 +28,7 @@ struct CreateEventDemoView: View {
             EventCreateSheetHost(
                 authSession: authSession,
                 eventRepository: MockEventRepository(),
+                categoryRepository: MockCategoryRepository(),
                 eventImageUploadService: MockEventImageUploadService(),
                 rsvpRepository: MockRsvpRepository(),
                 onCreated: { event in

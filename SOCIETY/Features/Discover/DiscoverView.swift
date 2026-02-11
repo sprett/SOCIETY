@@ -36,9 +36,12 @@ struct DiscoverView: View {
         isEventDetailPresented ? 0.12 : 0
     }
 
+    private let categoryRepository: any CategoryRepository
+
     init(
         eventRepository: any EventRepository = MockEventRepository(),
         profileRepository: any ProfileRepository = MockProfileRepository(),
+        categoryRepository: any CategoryRepository = MockCategoryRepository(),
         notificationSettingsRepository: any NotificationSettingsRepository = MockNotificationSettingsRepository(),
         rsvpRepository: any RsvpRepository = MockRsvpRepository(),
         eventImageUploadService: any EventImageUploadService = MockEventImageUploadService(),
@@ -48,6 +51,7 @@ struct DiscoverView: View {
     ) {
         self.eventRepository = eventRepository
         self.profileRepository = profileRepository
+        self.categoryRepository = categoryRepository
         self.notificationSettingsRepository = notificationSettingsRepository
         self.rsvpRepository = rsvpRepository
         self.eventImageUploadService = eventImageUploadService
@@ -56,7 +60,7 @@ struct DiscoverView: View {
         self.onHostEventTapped = onHostEventTapped
         _viewModel = StateObject(
             wrappedValue: DiscoverViewModel(
-                repository: eventRepository, locationManager: locationManager))
+                repository: eventRepository, categoryRepository: categoryRepository, locationManager: locationManager))
     }
 
     var body: some View {
@@ -351,12 +355,15 @@ final class DiscoverViewModel: ObservableObject {
 
     @Published private(set) var events: [Event] = []
     @Published var selectedCategory: String = "All"
+    @Published private(set) var dbCategories: [EventCategory] = []
 
     private let repository: any EventRepository
+    private let categoryRepository: any CategoryRepository
     private let locationManager: LocationManager
 
-    init(repository: any EventRepository, locationManager: LocationManager) {
+    init(repository: any EventRepository, categoryRepository: any CategoryRepository, locationManager: LocationManager) {
         self.repository = repository
+        self.categoryRepository = categoryRepository
         self.locationManager = locationManager
     }
 
@@ -371,10 +378,17 @@ final class DiscoverViewModel: ObservableObject {
         return eventLocation.distance(from: userLocation) / 1000
     }
 
-    /// All categories (same as event create). "All" plus every category, even if empty.
+    /// All categories from the DB (or static fallback). "All" plus every category.
     var categoryOptions: [CategoryOption] {
-        let options = EventCategories.all.map { category in
-            CategoryOption(title: category, systemImageName: EventCategories.icon(for: category))
+        let options: [CategoryOption]
+        if !dbCategories.isEmpty {
+            options = dbCategories.map { cat in
+                CategoryOption(title: cat.name, systemImageName: cat.iconIdentifier)
+            }
+        } else {
+            options = EventCategories.all.map { category in
+                CategoryOption(title: category, systemImageName: EventCategories.icon(for: category))
+            }
         }
         return [CategoryOption(title: "All", systemImageName: "sparkles")] + options
     }
@@ -454,7 +468,16 @@ final class DiscoverViewModel: ObservableObject {
     }
 
     func refresh() async {
+        await loadCategories()
         await loadEvents()
+    }
+
+    private func loadCategories() async {
+        do {
+            dbCategories = try await categoryRepository.fetchCategories()
+        } catch {
+            // Keep static fallback
+        }
     }
 
     private static let dateFormatter: DateFormatter = {

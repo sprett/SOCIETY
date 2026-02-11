@@ -8,28 +8,47 @@
 import Foundation
 
 enum EventCategories {
-    /// All categories available when creating an event. Shown in Browse by Category and create picker.
+    /// Static fallback list of categories. The canonical source is the `event_categories` DB table.
+    /// This list is used when the DB is unreachable or as a local reference.
     static let all: [String] = [
-        "AI",
-        "Tech",
-        "Business",
-        "Networking",
-        "Fitness",
-        "Wellness",
         "Music",
-        "Art",
-        "Food",
-        "Social",
+        "Tech",
+        "Food & Drinks",
+        "Fitness",
+        "Nature & Outdoors",
+        "Arts & Culture",
+        "Education",
+        "Personal Growth",
+        "Climate & Sustainability",
+        "Social & Community",
+        "Business & Networking",
+        "Gaming",
+        "Film",
+        "Culture",
+        "Family & Lifestyle",
     ]
 
     private static let icons: [String: String] = [
+        "Music": "music.note",
+        "Tech": "desktopcomputer",
+        "Food & Drinks": "fork.knife",
+        "Fitness": "figure.run",
+        "Nature & Outdoors": "leaf.fill",
+        "Arts & Culture": "paintpalette.fill",
+        "Education": "book.fill",
+        "Personal Growth": "brain.head.profile",
+        "Climate & Sustainability": "leaf.circle.fill",
+        "Social & Community": "person.3.fill",
+        "Business & Networking": "briefcase.fill",
+        "Gaming": "gamecontroller.fill",
+        "Film": "film",
+        "Culture": "theatermasks.fill",
+        "Family & Lifestyle": "house.fill",
+        // Legacy names kept for backward compat with older events
         "AI": "brain.head.profile",
-        "Tech": "bolt.fill",
         "Business": "briefcase.fill",
         "Networking": "person.2.fill",
-        "Fitness": "figure.run",
         "Wellness": "leaf.circle.fill",
-        "Music": "music.note",
         "Art": "paintpalette.fill",
         "Food": "fork.knife",
         "Social": "person.3.fill",

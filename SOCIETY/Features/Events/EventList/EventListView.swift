@@ -16,6 +16,7 @@ struct EventListView: View {
     private let eventRepository: any EventRepository
     private let authRepository: any AuthRepository
     private let profileRepository: any ProfileRepository
+    private let categoryRepository: any CategoryRepository
     private let notificationSettingsRepository: any NotificationSettingsRepository
     private let eventImageUploadService: any EventImageUploadService
     private let profileImageUploadService: any ProfileImageUploadService
@@ -30,6 +31,7 @@ struct EventListView: View {
         eventRepository: any EventRepository = MockEventRepository(),
         authRepository: any AuthRepository = PreviewAuthRepository(),
         profileRepository: any ProfileRepository = MockProfileRepository(),
+        categoryRepository: any CategoryRepository = MockCategoryRepository(),
         notificationSettingsRepository: any NotificationSettingsRepository = MockNotificationSettingsRepository(),
         eventImageUploadService: any EventImageUploadService = MockEventImageUploadService(),
         profileImageUploadService: any ProfileImageUploadService = MockProfileImageUploadService(),
@@ -40,6 +42,7 @@ struct EventListView: View {
         self.eventRepository = eventRepository
         self.authRepository = authRepository
         self.profileRepository = profileRepository
+        self.categoryRepository = categoryRepository
         self.notificationSettingsRepository = notificationSettingsRepository
         self.eventImageUploadService = eventImageUploadService
         self.profileImageUploadService = profileImageUploadService
@@ -123,6 +126,7 @@ struct EventListView: View {
             EventCreateSheetHost(
                 authSession: authSession,
                 eventRepository: eventRepository,
+                categoryRepository: categoryRepository,
                 eventImageUploadService: eventImageUploadService,
                 rsvpRepository: rsvpRepository,
                 onCreated: { createdEvent in

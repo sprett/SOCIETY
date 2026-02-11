@@ -14,6 +14,8 @@ final class AuthSessionStore: ObservableObject {
     @Published private(set) var userID: UUID?
     @Published private(set) var userEmail: String?
     @Published private(set) var userName: String?
+    @Published private(set) var userGivenName: String?
+    @Published private(set) var userFamilyName: String?
     @Published private(set) var profileImageURL: String?
 
     /// Cached full profile; when set, display name/email/avatar are derived from it.
@@ -36,6 +38,8 @@ final class AuthSessionStore: ObservableObject {
         }
         userEmail = await authRepository.currentUserEmail()
         userName = await authRepository.currentUserName()
+        userGivenName = await authRepository.currentUserGivenName()
+        userFamilyName = await authRepository.currentUserFamilyName()
         profileImageURL = await authRepository.currentUserProfileImageURL()
     }
 

@@ -23,6 +23,7 @@ struct MainTabView: View {
             DiscoverView(
                 eventRepository: dependencies.eventRepository,
                 profileRepository: dependencies.profileRepository,
+                categoryRepository: dependencies.categoryRepository,
                 notificationSettingsRepository: dependencies.notificationSettingsRepository,
                 rsvpRepository: dependencies.rsvpRepository,
                 eventImageUploadService: dependencies.eventImageUploadService,
@@ -44,6 +45,7 @@ struct MainTabView: View {
                 eventRepository: dependencies.eventRepository,
                 authRepository: dependencies.authRepository,
                 profileRepository: dependencies.profileRepository,
+                categoryRepository: dependencies.categoryRepository,
                 notificationSettingsRepository: dependencies.notificationSettingsRepository,
                 eventImageUploadService: dependencies.eventImageUploadService,
                 profileImageUploadService: dependencies.profileImageUploadService,
