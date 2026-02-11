@@ -29,6 +29,7 @@ final class MockProfileRepository: ProfileRepository {
             email: fallbackEmail ?? "preview@example.com",
             phoneNumber: nil,
             profileImageURL: nil,
+            birthday: nil,
             instagramHandle: nil,
             twitterHandle: nil,
             youtubeHandle: nil,

@@ -17,6 +17,7 @@ struct UserProfile: Equatable {
     var email: String
     var phoneNumber: String?
     var profileImageURL: String?
+    var birthday: Date?
 
     // Social handles (stored as handles or URLs as appropriate)
     var instagramHandle: String?

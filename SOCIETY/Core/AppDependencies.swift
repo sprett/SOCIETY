@@ -12,6 +12,7 @@ struct AppDependencies {
     let supabase: SupabaseClient
     let authRepository: any AuthRepository
     let profileRepository: any ProfileRepository
+    let categoryRepository: any CategoryRepository
     let notificationSettingsRepository: any NotificationSettingsRepository
     let eventRepository: any EventRepository
     let rsvpRepository: any RsvpRepository
@@ -31,6 +32,7 @@ extension AppDependencies {
             supabase: supabase,
             authRepository: PreviewAuthRepository(),
             profileRepository: MockProfileRepository(),
+            categoryRepository: MockCategoryRepository(),
             notificationSettingsRepository: MockNotificationSettingsRepository(),
             eventRepository: MockEventRepository(),
             rsvpRepository: MockRsvpRepository(),

@@ -12,6 +12,8 @@ protocol AuthRepository {
     func currentUserID() async -> UUID?
     func currentUserEmail() async -> String?
     func currentUserName() async -> String?
+    func currentUserGivenName() async -> String?
+    func currentUserFamilyName() async -> String?
     func currentUserProfileImageURL() async -> String?
 
     func signIn(email: String, password: String) async throws
@@ -29,6 +31,8 @@ final class PreviewAuthRepository: AuthRepository {
     func currentUserID() async -> UUID? { nil }
     func currentUserEmail() async -> String? { nil }
     func currentUserName() async -> String? { nil }
+    func currentUserGivenName() async -> String? { nil }
+    func currentUserFamilyName() async -> String? { nil }
     func currentUserProfileImageURL() async -> String? { nil }
     func signIn(email: String, password: String) async throws {}
     func signUp(email: String, password: String) async throws {}

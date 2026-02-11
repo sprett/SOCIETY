@@ -127,6 +127,7 @@ final class AccountSettingsViewModel: ObservableObject {
             email: email,
             phoneNumber: phoneNumber.isEmpty ? nil : phoneNumber,
             profileImageURL: loadedProfile?.profileImageURL,
+            birthday: loadedProfile?.birthday,
             instagramHandle: loadedProfile?.instagramHandle,
             twitterHandle: loadedProfile?.twitterHandle,
             youtubeHandle: loadedProfile?.youtubeHandle,

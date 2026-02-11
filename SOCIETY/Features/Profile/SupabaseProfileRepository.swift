@@ -31,6 +31,8 @@ final class SupabaseProfileRepository: ProfileRepository {
             let tiktokHandle: String?
             let linkedinHandle: String?
             let websiteUrl: String?
+            /// Decoded as string (Postgres date is "YYYY-MM-DD"); use parseBirthday() when building UserProfile.
+            let birthdayString: String?
 
             enum CodingKeys: String, CodingKey {
                 case id
@@ -47,6 +49,7 @@ final class SupabaseProfileRepository: ProfileRepository {
                 case tiktokHandle = "tiktok_handle"
                 case linkedinHandle = "linkedin_handle"
                 case websiteUrl = "website_url"
+                case birthdayString = "birthday"
             }
         }
 
@@ -79,6 +82,7 @@ final class SupabaseProfileRepository: ProfileRepository {
             email: fallbackEmail ?? "",
             phoneNumber: row.phoneNumber?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? row.phoneNumber : nil,
             profileImageURL: row.avatarUrl?.isEmpty == false ? row.avatarUrl : nil,
+            birthday: Self.parseBirthday(row.birthdayString),
             instagramHandle: row.instagramHandle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? row.instagramHandle : nil,
             twitterHandle: row.twitterHandle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? row.twitterHandle : nil,
             youtubeHandle: row.youtubeHandle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? row.youtubeHandle : nil,
@@ -86,6 +90,21 @@ final class SupabaseProfileRepository: ProfileRepository {
             linkedinHandle: row.linkedinHandle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? row.linkedinHandle : nil,
             websiteURL: row.websiteUrl?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? row.websiteUrl : nil
         )
+    }
+
+    private static func parseBirthday(_ string: String?) -> Date? {
+        guard let string = string?.trimmingCharacters(in: .whitespacesAndNewlines), !string.isEmpty else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        return formatter.date(from: string)
+    }
+
+    private static func formatBirthday(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        return formatter.string(from: date)
     }
 
     func updateProfile(_ profile: UserProfile) async throws {
@@ -104,6 +123,8 @@ final class SupabaseProfileRepository: ProfileRepository {
             let tiktokHandle: String?
             let linkedinHandle: String?
             let websiteUrl: String?
+            /// Encoded as "yyyy-MM-dd" for Postgres date column.
+            let birthdayString: String?
             let updatedAt: Date
 
             enum CodingKeys: String, CodingKey {
@@ -121,6 +142,7 @@ final class SupabaseProfileRepository: ProfileRepository {
                 case tiktokHandle = "tiktok_handle"
                 case linkedinHandle = "linkedin_handle"
                 case websiteUrl = "website_url"
+                case birthdayString = "birthday"
                 case updatedAt = "updated_at"
             }
         }
@@ -140,6 +162,7 @@ final class SupabaseProfileRepository: ProfileRepository {
             tiktokHandle: profile.tiktokHandle,
             linkedinHandle: profile.linkedinHandle,
             websiteUrl: profile.websiteURL,
+            birthdayString: profile.birthday.map { Self.formatBirthday($0) },
             updatedAt: Date()
         )
 

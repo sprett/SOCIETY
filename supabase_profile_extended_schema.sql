@@ -15,7 +15,8 @@ alter table public.profiles
   add column if not exists youtube_handle text,
   add column if not exists tiktok_handle text,
   add column if not exists linkedin_handle text,
-  add column if not exists website_url text;
+  add column if not exists website_url text,
+  add column if not exists birthday date;
 
 -- Optional: backfill full_name from first_name + last_name where full_name is null
 -- update public.profiles

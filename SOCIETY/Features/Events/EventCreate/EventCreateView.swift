@@ -189,6 +189,41 @@ private struct CreateEventFormFieldsView: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            // Category picker
+            _glassCard {
+                Button {
+                    viewModel.isShowingCategoryPicker = true
+                } label: {
+                    HStack(spacing: 12) {
+                        if let cat = viewModel.selectedCategory {
+                            Image(systemName: cat.iconIdentifier)
+                                .foregroundStyle(cat.accentColor)
+                        } else {
+                            Image(systemName: "tag")
+                                .foregroundStyle(AppColors.tertiaryText)
+                        }
+                        Text(viewModel.selectedCategory?.name ?? "Choose Category")
+                            .font(.subheadline)
+                            .foregroundStyle(
+                                viewModel.selectedCategory != nil
+                                    ? AppColors.primaryText : AppColors.secondaryText)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.tertiaryText)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .sheet(isPresented: $viewModel.isShowingCategoryPicker) {
+                CategoryPickerSheet(
+                    categories: viewModel.availableCategories,
+                    selectedCategory: $viewModel.selectedCategory
+                )
+            }
         }
     }
 
@@ -196,6 +231,53 @@ private struct CreateEventFormFieldsView: View {
         let t = viewModel.descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
         if t.count <= 80 { return t }
         return String(t.prefix(80)) + "…"
+    }
+}
+
+// MARK: - Category Picker Sheet
+
+private struct CategoryPickerSheet: View {
+    let categories: [EventCategory]
+    @Binding var selectedCategory: EventCategory?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List(categories) { category in
+                Button {
+                    selectedCategory = category
+                    dismiss()
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: category.iconIdentifier)
+                            .font(.system(size: 18))
+                            .foregroundStyle(category.accentColor)
+                            .frame(width: 28)
+                        Text(category.name)
+                            .font(.system(size: 17))
+                            .foregroundStyle(AppColors.primaryText)
+                        Spacer()
+                        if selectedCategory?.id == category.id {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(category.accentColor)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .listStyle(.plain)
+            .navigationTitle("Category")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .font(.system(size: 17, weight: .semibold))
+                }
+            }
+        }
     }
 }
 
@@ -1061,6 +1143,7 @@ private struct EventCreateContentBody: View {
 struct EventCreateSheetHost: View {
     let authSession: AuthSessionStore
     let eventRepository: any EventRepository
+    let categoryRepository: any CategoryRepository
     let eventImageUploadService: any EventImageUploadService
     let rsvpRepository: any RsvpRepository
     let onCreated: (Event) -> Void
@@ -1071,6 +1154,7 @@ struct EventCreateSheetHost: View {
     init(
         authSession: AuthSessionStore,
         eventRepository: any EventRepository,
+        categoryRepository: any CategoryRepository,
         eventImageUploadService: any EventImageUploadService,
         rsvpRepository: any RsvpRepository,
         onCreated: @escaping (Event) -> Void,
@@ -1078,6 +1162,7 @@ struct EventCreateSheetHost: View {
     ) {
         self.authSession = authSession
         self.eventRepository = eventRepository
+        self.categoryRepository = categoryRepository
         self.eventImageUploadService = eventImageUploadService
         self.rsvpRepository = rsvpRepository
         self.onCreated = onCreated
@@ -1086,6 +1171,7 @@ struct EventCreateSheetHost: View {
             wrappedValue: CreateEventViewModel(
                 authSession: authSession,
                 eventRepository: eventRepository,
+                categoryRepository: categoryRepository,
                 eventImageUploadService: eventImageUploadService,
                 rsvpRepository: rsvpRepository,
                 onCreated: onCreated
@@ -1108,6 +1194,7 @@ struct EventCreateSheetHost: View {
         viewModel: CreateEventViewModel(
             authSession: previewAuth,
             eventRepository: MockEventRepository(),
+            categoryRepository: MockCategoryRepository(),
             eventImageUploadService: MockEventImageUploadService(),
             rsvpRepository: MockRsvpRepository(),
             onCreated: { _ in }

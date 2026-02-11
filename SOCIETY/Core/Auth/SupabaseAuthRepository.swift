@@ -62,6 +62,32 @@ final class SupabaseAuthRepository: AuthRepository {
         }
     }
 
+    func currentUserGivenName() async -> String? {
+        do {
+            let session = try await client.auth.session
+            if session.isExpired { return nil }
+            if case .string(let given)? = session.user.userMetadata["given_name"] {
+                return given
+            }
+            return nil
+        } catch {
+            return nil
+        }
+    }
+
+    func currentUserFamilyName() async -> String? {
+        do {
+            let session = try await client.auth.session
+            if session.isExpired { return nil }
+            if case .string(let family)? = session.user.userMetadata["family_name"] {
+                return family
+            }
+            return nil
+        } catch {
+            return nil
+        }
+    }
+
     func currentUserProfileImageURL() async -> String? {
         do {
             // Try to get from current session first

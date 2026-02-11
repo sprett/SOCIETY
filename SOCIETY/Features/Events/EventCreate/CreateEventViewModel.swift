@@ -37,6 +37,11 @@ final class CreateEventViewModel: ObservableObject {
     @Published var coverImageData: Data?
     @Published var coverPickerItem: PhotosPickerItem?
 
+    // Category selection (DB-driven)
+    @Published var availableCategories: [EventCategory] = []
+    @Published var selectedCategory: EventCategory?
+    @Published var isShowingCategoryPicker: Bool = false
+
     // UI presentation state for sheets/editors. Keeping this here (instead of @State in the
     // view) avoids a SwiftUI crash in the @State backing initializer when the create sheet
     // is presented.
@@ -52,6 +57,7 @@ final class CreateEventViewModel: ObservableObject {
 
     private let authSession: AuthSessionStore
     private let eventRepository: any EventRepository
+    private let categoryRepository: any CategoryRepository
     private let eventImageUploadService: any EventImageUploadService
     private let rsvpRepository: any RsvpRepository
     private let onCreated: (Event) -> Void
@@ -59,15 +65,38 @@ final class CreateEventViewModel: ObservableObject {
     init(
         authSession: AuthSessionStore,
         eventRepository: any EventRepository,
+        categoryRepository: any CategoryRepository,
         eventImageUploadService: any EventImageUploadService,
         rsvpRepository: any RsvpRepository,
         onCreated: @escaping (Event) -> Void
     ) {
         self.authSession = authSession
         self.eventRepository = eventRepository
+        self.categoryRepository = categoryRepository
         self.eventImageUploadService = eventImageUploadService
         self.rsvpRepository = rsvpRepository
         self.onCreated = onCreated
+
+        Task { @MainActor in
+            await loadCategories()
+        }
+    }
+
+    func loadCategories() async {
+        do {
+            availableCategories = try await categoryRepository.fetchCategories()
+        } catch {
+            // Fallback: use static list so form is still usable
+            availableCategories = EventCategories.all.enumerated().map { idx, name in
+                EventCategory(
+                    id: UUID(),
+                    name: name,
+                    iconIdentifier: EventCategories.icon(for: name),
+                    accentColorHex: nil,
+                    displayOrder: idx
+                )
+            }
+        }
     }
 
     var isFormValid: Bool {
@@ -138,7 +167,7 @@ final class CreateEventViewModel: ObservableObject {
         let draft = EventDraft(
             ownerID: authSession.userID,
             title: eventName.trimmingCharacters(in: .whitespacesAndNewlines),
-            category: "General",
+            category: selectedCategory?.name ?? "General",
             startDate: startDate,
             endDate: endDate,
             venueName: location.displayName,

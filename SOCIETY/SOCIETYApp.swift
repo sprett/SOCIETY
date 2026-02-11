@@ -14,6 +14,17 @@ import UIKit
 struct SOCIETYApp: App {
     private let dependencies: AppDependencies
     @StateObject private var authSession: AuthSessionStore
+    @AppStorage("hasCompletedOnboardingV2") private var hasCompletedOnboardingStorage = false
+
+    /// In DEBUG, always false so onboarding shows on every launch for easier development.
+    private var effectiveHasCompletedOnboarding: Bool {
+        #if DEBUG
+            return false
+        #else
+            return hasCompletedOnboardingStorage
+        #endif
+    }
+    @AppStorage(profileSetupCompletedUserIDKey) private var profileSetupCompletedUserID: String = ""
     @AppStorage(AppearanceMode.storageKey) private var appearanceMode: String = AppearanceMode
         .system.rawValue
 
@@ -36,6 +47,7 @@ struct SOCIETYApp: App {
                 supabase: supabase,
                 authRepository: authRepository,
                 profileRepository: SupabaseProfileRepository(client: supabase),
+                categoryRepository: SupabaseCategoryRepository(client: supabase),
                 notificationSettingsRepository: UserDefaultsNotificationSettingsRepository(),
                 eventRepository: SupabaseEventRepository(client: supabase),
                 rsvpRepository: SupabaseRsvpRepository(client: supabase),
@@ -56,7 +68,18 @@ struct SOCIETYApp: App {
         let appearance = UITabBarAppearance()
         appearance.configureWithTransparentBackground()
         appearance.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.8)
+        // Unselected: outline style (gray)
+        appearance.stackedLayoutAppearance.normal.iconColor = .secondaryLabel
+        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+            .foregroundColor: UIColor.secondaryLabel
+        ]
+        // Selected: solid style (primary color, not blue)
+        appearance.stackedLayoutAppearance.selected.iconColor = .label
+        appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+            .foregroundColor: UIColor.label
+        ]
         UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().tintColor = .label
         if #available(iOS 15.0, *) {
             UITabBar.appearance().scrollEdgeAppearance = appearance
         }
@@ -79,13 +102,32 @@ struct SOCIETYApp: App {
         WindowGroup {
             Group {
                 if authSession.isAuthenticated {
-                    MainTabView(dependencies: dependencies)
+                    if profileSetupCompletedUserID == authSession.userID?.uuidString {
+                        MainTabView(dependencies: dependencies)
+                            .environmentObject(authSession)
+                    } else {
+                        NavigationStack {
+                            ProfileSetupView(
+                                authSession: authSession,
+                                profileRepository: dependencies.profileRepository,
+                                categoryRepository: dependencies.categoryRepository,
+                                profileImageUploadService: dependencies.profileImageUploadService
+                            )
+                        }
                         .environmentObject(authSession)
+                    }
                 } else {
-                    WelcomeView(
-                        authRepository: dependencies.authRepository,
-                        authSession: authSession
-                    )
+                    if effectiveHasCompletedOnboarding {
+                        WelcomeView(
+                            authRepository: dependencies.authRepository,
+                            authSession: authSession
+                        )
+                    } else {
+                        OnboardingView(
+                            authRepository: dependencies.authRepository,
+                            authSession: authSession
+                        )
+                    }
                 }
             }
             .preferredColorScheme(preferredColorScheme)
