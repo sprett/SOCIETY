@@ -8,6 +8,7 @@
 import Combine
 import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 import UserNotifications
 
 /// UserDefaults key: value is the UUID string of the user who completed profile setup.
@@ -341,7 +342,22 @@ final class ProfileSetupViewModel: ObservableObject {
     // MARK: Photo handling
 
     private func loadPhoto(_ item: PhotosPickerItem) async {
+        // Reject videos and GIFs; we only support static photo formats (e.g. JPEG, PNG, HEIC).
+        let isVideoOrGif = item.supportedContentTypes.contains { type in
+            type.conforms(to: .movie) || type.conforms(to: .video) || type.conforms(to: .gif)
+        }
+        if isVideoOrGif {
+            selectedPhoto = nil
+            errorMessage = "Please choose a photo only. Videos and GIFs are not supported."
+            return
+        }
         guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+        guard UIImage(data: data) != nil else {
+            selectedPhoto = nil
+            errorMessage = "Please choose a valid photo. This file format is not supported."
+            return
+        }
+        errorMessage = nil
         selectedImageData = data
         await uploadProfileImage()
     }

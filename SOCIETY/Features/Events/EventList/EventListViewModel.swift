@@ -13,26 +13,49 @@ import SwiftUI
 @MainActor
 final class EventListViewModel: ObservableObject {
     @Published private(set) var events: [Event] = []
+    @Published private(set) var firstName: String = ""
 
     private let repository: any EventRepository
     private let rsvpRepository: any RsvpRepository
+    private let profileRepository: any ProfileRepository
     private let locationManager: LocationManager
     @Published private(set) var userID: UUID?
 
     init(
         repository: any EventRepository,
         rsvpRepository: any RsvpRepository,
+        profileRepository: any ProfileRepository,
         locationManager: LocationManager,
         userID: UUID?
     ) {
         self.repository = repository
         self.rsvpRepository = rsvpRepository
+        self.profileRepository = profileRepository
         self.locationManager = locationManager
         self.userID = userID
     }
 
     func updateUserID(_ newUserID: UUID?) {
         userID = newUserID
+        if newUserID == nil {
+            firstName = ""
+        }
+    }
+
+    func loadProfile(fallbackEmail: String?) {
+        guard let userID = userID else { return }
+        Task {
+            do {
+                if let profile = try await profileRepository.loadProfile(userID: userID, fallbackEmail: fallbackEmail) {
+                    let first = profile.firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    firstName = first.isEmpty ? "" : first
+                } else {
+                    firstName = ""
+                }
+            } catch {
+                firstName = ""
+            }
+        }
     }
 
     private func loadEvents() async {
