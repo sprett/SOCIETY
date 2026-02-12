@@ -43,6 +43,7 @@ struct SOCIETYApp: App {
             _authSession = StateObject(
                 wrappedValue: AuthSessionStore(authRepository: authRepository))
 
+            let imageProcessor = ImageProcessor()
             self.dependencies = AppDependencies(
                 supabase: supabase,
                 authRepository: authRepository,
@@ -51,8 +52,9 @@ struct SOCIETYApp: App {
                 notificationSettingsRepository: UserDefaultsNotificationSettingsRepository(),
                 eventRepository: SupabaseEventRepository(client: supabase),
                 rsvpRepository: SupabaseRsvpRepository(client: supabase),
-                eventImageUploadService: SupabaseEventImageUploadService(client: supabase),
-                profileImageUploadService: SupabaseProfileImageUploadService(client: supabase),
+                eventImageUploadService: SupabaseEventImageUploadService(client: supabase, imageProcessor: imageProcessor),
+                profileImageUploadService: SupabaseProfileImageUploadService(client: supabase, imageProcessor: imageProcessor),
+                imageProcessor: imageProcessor,
                 locationManager: LocationManager()
             )
         } catch {

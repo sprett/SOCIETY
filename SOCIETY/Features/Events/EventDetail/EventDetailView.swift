@@ -336,6 +336,7 @@ final class EventDetailViewModel: ObservableObject {
     private let eventImageUploadService: any EventImageUploadService
     private let rsvpRepository: any RsvpRepository
     private let authSession: AuthSessionStore
+    private let imageProcessor: ImageProcessor
     private let onDeleted: () -> Void
     private let onCoverChanged: () -> Void
     private let onRsvpChanged: () -> Void
@@ -348,6 +349,7 @@ final class EventDetailViewModel: ObservableObject {
         eventImageUploadService: any EventImageUploadService,
         rsvpRepository: any RsvpRepository,
         authSession: AuthSessionStore,
+        imageProcessor: ImageProcessor = ImageProcessor(),
         onDeleted: @escaping () -> Void,
         onCoverChanged: @escaping () -> Void,
         onRsvpChanged: @escaping () -> Void
@@ -357,6 +359,7 @@ final class EventDetailViewModel: ObservableObject {
         self.eventImageUploadService = eventImageUploadService
         self.rsvpRepository = rsvpRepository
         self.authSession = authSession
+        self.imageProcessor = imageProcessor
         self.onDeleted = onDeleted
         self.onCoverChanged = onCoverChanged
         self.onRsvpChanged = onRsvpChanged
@@ -511,7 +514,7 @@ final class EventDetailViewModel: ObservableObject {
 
     func uploadNewCoverAndReplace() async {
         guard let item = changeCoverItem else { return }
-        guard let imageData = try? await item.loadTransferable(type: Data.self), !imageData.isEmpty
+        guard let rawData = try? await item.loadTransferable(type: Data.self), !rawData.isEmpty
         else {
             changeCoverItem = nil
             return
@@ -522,9 +525,18 @@ final class EventDetailViewModel: ObservableObject {
             oldImageURL.contains("event-images")
             || (oldImageURL.hasPrefix("http") && oldImageURL.contains("event-images"))
         do {
-            let newURL = try await eventImageUploadService.upload(imageData)
-            let newURLString = newURL.absoluteString
-            // Delete previous cover from storage before updating the event (same order as profile: delete old after upload, so we remove the file we're replacing).
+            // Preprocess: center-crop, resize to 512×512 (+ 100×100 thumb), JPEG-encode
+            let processed = try await imageProcessor.processEventImage(from: rawData)
+
+            // Upload preprocessed data with structured path
+            let uploaded = try await eventImageUploadService.uploadPreprocessed(
+                mainData: processed.main512,
+                thumbData: processed.thumb100,
+                eventId: event.id
+            )
+            let newURLString = uploaded.mainURL.absoluteString
+
+            // Delete previous cover from storage (best-effort)
             if hasOldImageInOurBucket, !oldImageURL.isEmpty {
                 await eventImageUploadService.deleteFromStorageIfOwned(url: oldImageURL)
             }

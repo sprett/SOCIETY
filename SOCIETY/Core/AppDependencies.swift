@@ -18,6 +18,7 @@ struct AppDependencies {
     let rsvpRepository: any RsvpRepository
     let eventImageUploadService: any EventImageUploadService
     let profileImageUploadService: any ProfileImageUploadService
+    let imageProcessor: ImageProcessor
     let locationManager: LocationManager
 }
 
@@ -38,6 +39,7 @@ extension AppDependencies {
             rsvpRepository: MockRsvpRepository(),
             eventImageUploadService: MockEventImageUploadService(),
             profileImageUploadService: MockProfileImageUploadService(),
+            imageProcessor: ImageProcessor(),
             locationManager: LocationManager()
         )
     }

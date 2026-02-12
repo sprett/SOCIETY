@@ -477,11 +477,8 @@ struct EventCreateView: View {
             .padding(.bottom, 40)
         }
         .background(createEventBackground)
-        .onChange(of: viewModel.coverPickerItem) { _, newItem in
-            Task {
-                await loadCoverImage(from: newItem)
-            }
-        }
+        // Cover image preprocessing is handled by CreateEventViewModel's Combine pipeline.
+        // No need for onChange here; the ViewModel observes coverPickerItem directly.
         .sheet(isPresented: $viewModel.isShowingStartDatePicker) {
             dateTimePickerSheet(
                 date: $viewModel.startDate,
@@ -610,7 +607,16 @@ struct EventCreateView: View {
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height)
             ZStack {
-                if let data = viewModel.coverImageData, let uiImage = UIImage(data: data) {
+                if viewModel.isProcessingCoverImage {
+                    VStack(spacing: 8) {
+                        ProgressView()
+                        Text("Processing...")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.secondaryText)
+                    }
+                    .frame(width: side, height: side)
+                    .background(AppColors.surface.opacity(0.5))
+                } else if let data = viewModel.coverImageData, let uiImage = UIImage(data: data) {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
@@ -635,7 +641,7 @@ struct EventCreateView: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .strokeBorder(
                         AppColors.divider,
-                        style: viewModel.coverImageData == nil
+                        style: viewModel.coverImageData == nil && !viewModel.isProcessingCoverImage
                             ? StrokeStyle(lineWidth: 2, dash: [8, 4])
                             : StrokeStyle(lineWidth: 1)
                     )
@@ -651,6 +657,7 @@ struct EventCreateView: View {
                         .background(Circle().fill(.ultraThinMaterial))
                 }
                 .buttonStyle(.plain)
+                .disabled(viewModel.isProcessingCoverImage)
                 .padding(12)
             }
         }
@@ -727,18 +734,6 @@ struct EventCreateView: View {
         .presentationDetents([.fraction(1.0 / 3.0)])
     }
 
-    private func loadCoverImage(from item: PhotosPickerItem?) async {
-        guard let item = item else {
-            viewModel.coverImageData = nil
-            return
-        }
-        guard let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty else {
-            viewModel.coverPickerItem = nil
-            viewModel.coverImageData = nil
-            return
-        }
-        viewModel.coverImageData = data
-    }
 }
 
 /// Content-only view for the create flow: no property wrappers, so safe to create
@@ -761,11 +756,7 @@ private struct EventCreateContentBody: View {
             .padding(.bottom, 40)
         }
         .background(hostCreateEventBackground)
-        .onChange(of: viewModel.coverPickerItem) { _, newItem in
-            Task {
-                await hostLoadCoverImage(from: newItem)
-            }
-        }
+        // Cover image preprocessing is handled by CreateEventViewModel's Combine pipeline.
         .sheet(isPresented: viewModel.binding(\.isShowingStartDatePicker)) {
             hostDateTimePickerSheet(
                 date: viewModel.binding(\.startDate),
@@ -891,7 +882,16 @@ private struct EventCreateContentBody: View {
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height)
             ZStack {
-                if let data = viewModel.coverImageData, let uiImage = UIImage(data: data) {
+                if viewModel.isProcessingCoverImage {
+                    VStack(spacing: 8) {
+                        ProgressView()
+                        Text("Processing...")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.secondaryText)
+                    }
+                    .frame(width: side, height: side)
+                    .background(AppColors.surface.opacity(0.5))
+                } else if let data = viewModel.coverImageData, let uiImage = UIImage(data: data) {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
@@ -916,7 +916,7 @@ private struct EventCreateContentBody: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .strokeBorder(
                         AppColors.divider,
-                        style: viewModel.coverImageData == nil
+                        style: viewModel.coverImageData == nil && !viewModel.isProcessingCoverImage
                             ? StrokeStyle(lineWidth: 2, dash: [8, 4])
                             : StrokeStyle(lineWidth: 1)
                     )
@@ -932,6 +932,7 @@ private struct EventCreateContentBody: View {
                         .background(Circle().fill(.ultraThinMaterial))
                 }
                 .buttonStyle(.plain)
+                .disabled(viewModel.isProcessingCoverImage)
                 .padding(12)
             }
         }
@@ -1123,18 +1124,6 @@ private struct EventCreateContentBody: View {
         .presentationDetents([.fraction(1.0 / 3.0)])
     }
 
-    private func hostLoadCoverImage(from item: PhotosPickerItem?) async {
-        guard let item = item else {
-            viewModel.coverImageData = nil
-            return
-        }
-        guard let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty else {
-            viewModel.coverPickerItem = nil
-            viewModel.coverImageData = nil
-            return
-        }
-        viewModel.coverImageData = data
-    }
 }
 
 /// Host used when presenting the create flow in fullScreenCover. Owns the view model;

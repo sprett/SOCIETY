@@ -10,6 +10,9 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
+// Note: coverImageData now holds preprocessed (cropped/resized/compressed) JPEG data.
+// Raw data from PhotosPicker is processed by ImageProcessor before being stored here.
+
 struct SelectedLocation: Equatable {
     let displayName: String
     let addressLine: String?
@@ -36,6 +39,12 @@ final class CreateEventViewModel: ObservableObject {
     @Published var visibility: EventVisibility = .public
     @Published var coverImageData: Data?
     @Published var coverPickerItem: PhotosPickerItem?
+    @Published var isProcessingCoverImage: Bool = false
+
+    /// Preprocessed cover image data ready for upload (512×512 JPEG).
+    private var processedCoverMain: Data?
+    /// Preprocessed thumb data (100×100 JPEG), if available.
+    private var processedCoverThumb: Data?
 
     // Category selection (DB-driven)
     @Published var availableCategories: [EventCategory] = []
@@ -60,7 +69,9 @@ final class CreateEventViewModel: ObservableObject {
     private let categoryRepository: any CategoryRepository
     private let eventImageUploadService: any EventImageUploadService
     private let rsvpRepository: any RsvpRepository
+    private let imageProcessor: ImageProcessor
     private let onCreated: (Event) -> Void
+    private var cancellables = Set<AnyCancellable>()
 
     init(
         authSession: AuthSessionStore,
@@ -68,6 +79,7 @@ final class CreateEventViewModel: ObservableObject {
         categoryRepository: any CategoryRepository,
         eventImageUploadService: any EventImageUploadService,
         rsvpRepository: any RsvpRepository,
+        imageProcessor: ImageProcessor = ImageProcessor(),
         onCreated: @escaping (Event) -> Void
     ) {
         self.authSession = authSession
@@ -75,7 +87,17 @@ final class CreateEventViewModel: ObservableObject {
         self.categoryRepository = categoryRepository
         self.eventImageUploadService = eventImageUploadService
         self.rsvpRepository = rsvpRepository
+        self.imageProcessor = imageProcessor
         self.onCreated = onCreated
+
+        // Observe cover picker changes → load + preprocess
+        $coverPickerItem
+            .sink { [weak self] item in
+                Task { @MainActor in
+                    await self?.processCoverImage(from: item)
+                }
+            }
+            .store(in: &cancellables)
 
         Task { @MainActor in
             await loadCategories()
@@ -143,6 +165,42 @@ final class CreateEventViewModel: ObservableObject {
         startDate = endDate.addingTimeInterval(-Self.eventDuration)
     }
 
+    /// Loads raw data from the picker item, preprocesses (center-crop, resize, JPEG-encode),
+    /// and stores the result for preview and later upload.
+    func processCoverImage(from item: PhotosPickerItem?) async {
+        guard let item else {
+            coverImageData = nil
+            processedCoverMain = nil
+            processedCoverThumb = nil
+            return
+        }
+
+        isProcessingCoverImage = true
+        coverImageData = nil
+        processedCoverMain = nil
+        processedCoverThumb = nil
+
+        do {
+            guard let rawData = try await item.loadTransferable(type: Data.self), !rawData.isEmpty else {
+                coverPickerItem = nil
+                isProcessingCoverImage = false
+                return
+            }
+
+            let result = try await imageProcessor.processEventImage(from: rawData)
+            processedCoverMain = result.main512
+            processedCoverThumb = result.thumb100
+            // Use the preprocessed 512×512 image for preview
+            coverImageData = result.main512
+        } catch {
+            createErrorMessage = error.localizedDescription
+            isCreateErrorPresented = true
+            coverPickerItem = nil
+        }
+
+        isProcessingCoverImage = false
+    }
+
     func createEvent() async {
         guard isFormValid, let location = selectedLocation else { return }
 
@@ -152,18 +210,7 @@ final class CreateEventViewModel: ObservableObject {
 
         let addressLine = location.addressLine ?? ""
 
-        var imageURL: String?
-        if let data = coverImageData, !data.isEmpty {
-            do {
-                let url = try await eventImageUploadService.upload(data)
-                imageURL = url.absoluteString
-            } catch {
-                createErrorMessage = error.localizedDescription
-                isCreateErrorPresented = true
-                return
-            }
-        }
-
+        // Create event first (without image), then upload cover with the event ID.
         let draft = EventDraft(
             ownerID: authSession.userID,
             title: eventName.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -175,7 +222,7 @@ final class CreateEventViewModel: ObservableObject {
             neighborhood: location.neighborhood,
             latitude: location.coordinate.latitude,
             longitude: location.coordinate.longitude,
-            imageURL: imageURL,
+            imageURL: nil,
             about: descriptionText.trimmingCharacters(in: .whitespacesAndNewlines),
             isFeatured: false,
             visibility: visibility
@@ -183,6 +230,39 @@ final class CreateEventViewModel: ObservableObject {
 
         do {
             var event = try await eventRepository.createEvent(draft)
+
+            // Upload preprocessed cover image now that we have the event ID.
+            if let mainData = processedCoverMain, !mainData.isEmpty {
+                let uploaded = try await eventImageUploadService.uploadPreprocessed(
+                    mainData: mainData,
+                    thumbData: processedCoverThumb,
+                    eventId: event.id
+                )
+                let imageURLString = uploaded.mainURL.absoluteString
+                try await eventRepository.updateEventCover(
+                    eventID: event.id,
+                    imageURL: imageURLString
+                )
+                // Update event with the new image URL
+                event = Event(
+                    id: event.id,
+                    ownerID: event.ownerID,
+                    title: event.title,
+                    category: event.category,
+                    startDate: event.startDate,
+                    venueName: event.venueName,
+                    neighborhood: event.neighborhood,
+                    distanceKm: event.distanceKm,
+                    imageNameOrURL: imageURLString,
+                    isFeatured: event.isFeatured,
+                    endDate: event.endDate,
+                    addressLine: event.addressLine,
+                    coordinate: event.coordinate,
+                    hosts: event.hosts,
+                    goingCount: event.goingCount,
+                    about: event.about
+                )
+            }
 
             if event.hosts == nil, event.ownerID == authSession.userID, let uid = authSession.userID
             {

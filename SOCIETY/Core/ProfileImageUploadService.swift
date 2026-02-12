@@ -2,77 +2,101 @@
 //  ProfileImageUploadService.swift
 //  SOCIETY
 //
-//  Uploads profile images to storage and returns a public URL.
-//  Requires a public Supabase Storage bucket named "profile-images" with policies allowing
-//  authenticated uploads (INSERT) and deletes (DELETE). See supabase_storage_policies.sql.
+//  Uploads preprocessed profile avatar images to Supabase Storage.
+//  Images are center-cropped, resized to 100×100, and JPEG-encoded on-device before upload.
+//  Requires a public Supabase Storage bucket named "profile-images".
+//  See supabase_storage_policies.sql for the required RLS policies.
 //
 
 import Foundation
 import Supabase
 
 protocol ProfileImageUploadService {
-    /// Uploads image data to storage and returns the public URL.
-    /// - Parameter data: Image data (e.g. JPEG).
-    /// - Returns: Public URL of the uploaded file.
+    /// Preprocesses raw image data and uploads a 100×100 avatar to
+    /// `avatars/<userId>/<uuid>_512.jpg`.
+    /// - Returns: Public URL of the uploaded avatar.
+    func uploadProcessed(rawData: Data, userId: UUID) async throws -> URL
+
+    /// Uploads already-preprocessed avatar data directly (no additional processing).
+    /// - Parameters:
+    ///   - avatarData: 100×100 JPEG data ready for upload.
+    ///   - userId: The user's UUID (used for the storage path).
+    /// - Returns: Public URL of the uploaded avatar.
+    func uploadPreprocessed(avatarData: Data, userId: UUID) async throws -> URL
+
+    /// Legacy upload: uploads raw `Data` as-is (no preprocessing, flat path).
+    /// Prefer `uploadProcessed(rawData:userId:)` for new code.
     func upload(_ data: Data) async throws -> URL
 
     /// Deletes the object at the given URL from storage if it belongs to this service's bucket.
-    /// No-op if the URL is not from this bucket (e.g. external or placeholder). Ignores errors so callers can treat it as best-effort cleanup.
-    /// - Parameter url: Full public URL of the object (e.g. from user metadata).
+    /// No-op if the URL is not from this bucket. Ignores errors so callers can treat it as best-effort cleanup.
     func deleteFromStorageIfOwned(url: String) async
 }
 
 final class SupabaseProfileImageUploadService: ProfileImageUploadService {
+    private let uploader: SupabaseStorageUploader
+    private let imageProcessor: ImageProcessor
     private let client: SupabaseClient
-    private static let bucketName = "profile-images"
-    private static let contentType = "image/jpeg"
+    static let bucketName = "profile-images"
 
-    init(client: SupabaseClient) {
+    init(client: SupabaseClient, imageProcessor: ImageProcessor = ImageProcessor()) {
         self.client = client
+        self.imageProcessor = imageProcessor
+        self.uploader = SupabaseStorageUploader(client: client, bucketName: Self.bucketName)
+    }
+
+    func uploadProcessed(rawData: Data, userId: UUID) async throws -> URL {
+        // 1. Preprocess on a background thread
+        let avatarData = try await imageProcessor.processProfileImage(from: rawData)
+
+        // 2. Build storage path
+        let fileId = UUID().uuidString
+        let path = "avatars/\(userId.uuidString)/\(fileId)_512.jpg"
+
+        // 3. Upload
+        try await uploader.upload(data: avatarData, path: path)
+        return try uploader.publicURL(for: path)
+    }
+
+    func uploadPreprocessed(avatarData: Data, userId: UUID) async throws -> URL {
+        let fileId = UUID().uuidString
+        let path = "avatars/\(userId.uuidString)/\(fileId)_512.jpg"
+        try await uploader.upload(data: avatarData, path: path)
+        return try uploader.publicURL(for: path)
     }
 
     func upload(_ data: Data) async throws -> URL {
         let path = "\(UUID().uuidString).jpg"
-        let options = FileOptions(
-            cacheControl: "3600",
-            contentType: Self.contentType,
-            upsert: false
-        )
-        _ = try await client.storage
-            .from(Self.bucketName)
-            .upload(path, data: data, options: options)
-        return try client.storage
-            .from(Self.bucketName)
-            .getPublicURL(path: path)
+        try await uploader.upload(data: data, path: path)
+        return try uploader.publicURL(for: path)
     }
 
     func deleteFromStorageIfOwned(url: String) async {
         guard let path = pathInBucket(from: url) else { return }
-        _ = try? await client.storage
-            .from(Self.bucketName)
-            .remove(paths: [path])
+        await uploader.delete(paths: [path])
     }
 
+    // MARK: - Path extraction
+
     /// Extracts the storage object path from a public URL if it points to our bucket.
-    /// Supports: .../storage/v1/object/public/<bucket>/<path> and .../storage/v1/public/<bucket>/<path>
     private func pathInBucket(from urlString: String) -> String? {
         guard let url = URL(string: urlString),
               let pathComponent = url.path.removingPercentEncoding ?? Optional(url.path)
         else { return nil }
         let path = pathComponent.hasPrefix("/") ? pathComponent : "/" + pathComponent
-        // Try standard format first: /storage/v1/object/public/profile-images/UUID.jpg
+
         let objectPublicPrefix = "/storage/v1/object/public/\(Self.bucketName)/"
         if path.hasPrefix(objectPublicPrefix) {
             let suffix = String(path.dropFirst(objectPublicPrefix.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             return suffix.isEmpty ? nil : suffix
         }
-        // Some SDKs or proxies use: /storage/v1/public/profile-images/UUID.jpg
+
         let publicPrefix = "/storage/v1/public/\(Self.bucketName)/"
         if path.hasPrefix(publicPrefix) {
             let suffix = String(path.dropFirst(publicPrefix.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             return suffix.isEmpty ? nil : suffix
         }
-        // Fallback: any URL that contains our bucket name followed by the object path
+
         let marker = "/\(Self.bucketName)/"
         guard let range = path.range(of: marker) else { return nil }
         let suffix = String(path[range.upperBound...]).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -82,6 +106,14 @@ final class SupabaseProfileImageUploadService: ProfileImageUploadService {
 
 /// Mock for previews; returns a placeholder URL without uploading.
 struct MockProfileImageUploadService: ProfileImageUploadService {
+    func uploadProcessed(rawData: Data, userId: UUID) async throws -> URL {
+        URL(string: "https://example.com/avatars/\(userId)/placeholder_512.jpg")!
+    }
+
+    func uploadPreprocessed(avatarData: Data, userId: UUID) async throws -> URL {
+        URL(string: "https://example.com/avatars/\(userId)/placeholder_512.jpg")!
+    }
+
     func upload(_ data: Data) async throws -> URL {
         URL(string: "https://example.com/placeholder-profile.jpg")!
     }

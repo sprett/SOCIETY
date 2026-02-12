@@ -31,8 +31,11 @@ final class EditProfileViewModel: ObservableObject {
     private let authSession: AuthSessionStore
     private let profileRepository: any ProfileRepository
     private let profileImageUploadService: any ProfileImageUploadService
+    private let imageProcessor: ImageProcessor
     private var cancellables = Set<AnyCancellable>()
     private var loadedProfile: UserProfile?
+    /// Preprocessed avatar data ready for upload (100×100 JPEG).
+    private var processedAvatarData: Data?
 
     var hasChanges: Bool {
         guard let p = loadedProfile else { return true }
@@ -56,11 +59,13 @@ final class EditProfileViewModel: ObservableObject {
     init(
         authSession: AuthSessionStore,
         profileRepository: any ProfileRepository,
-        profileImageUploadService: any ProfileImageUploadService
+        profileImageUploadService: any ProfileImageUploadService,
+        imageProcessor: ImageProcessor = ImageProcessor()
     ) {
         self.authSession = authSession
         self.profileRepository = profileRepository
         self.profileImageUploadService = profileImageUploadService
+        self.imageProcessor = imageProcessor
 
         $selectedPhoto
             .compactMap { $0 }
@@ -182,25 +187,44 @@ final class EditProfileViewModel: ObservableObject {
     }
 
     private func loadPhoto(_ item: PhotosPickerItem) async {
-        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-        selectedImageData = data
+        guard let rawData = try? await item.loadTransferable(type: Data.self) else { return }
+
+        // Preprocess: center-crop, resize to 100×100, JPEG-encode
+        isLoading = true
+        errorMessage = nil
+        do {
+            let avatarData = try await imageProcessor.processProfileImage(from: rawData)
+            processedAvatarData = avatarData
+            selectedImageData = avatarData  // Use preprocessed data for preview
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+            return
+        }
+        isLoading = false
+
         await uploadProfileImage()
     }
 
     private func uploadProfileImage() async {
-        guard let imageData = selectedImageData else { return }
+        guard let userID = authSession.userID else { return }
+        guard let avatarData = processedAvatarData else { return }
         let oldProfileImageURL = await authSession.getCurrentProfileImageURL()
         isLoading = true
         errorMessage = nil
 
         do {
-            let url = try await profileImageUploadService.upload(imageData)
+            let url = try await profileImageUploadService.uploadPreprocessed(
+                avatarData: avatarData,
+                userId: userID
+            )
             profileImageURL = url.absoluteString
             try await authSession.updateProfileImage(url.absoluteString)
             if let oldURL = oldProfileImageURL {
                 await profileImageUploadService.deleteFromStorageIfOwned(url: oldURL)
             }
             try? await Task.sleep(nanoseconds: 300_000_000)
+            processedAvatarData = nil
             selectedImageData = nil
             selectedPhoto = nil
         } catch {

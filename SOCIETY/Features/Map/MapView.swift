@@ -235,7 +235,7 @@ struct EventMapImageView: View {
     var body: some View {
         ZStack {
             if isURL {
-                AsyncImage(url: URL(string: imageNameOrURL)) { phase in
+                AsyncImage(url: URL(string: imageNameOrURL.eventThumbnailURL)) { phase in
                     switch phase {
                     case .empty:
                         placeholderView
