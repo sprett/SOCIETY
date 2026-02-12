@@ -22,14 +22,19 @@ final class ProfileViewModel: ObservableObject {
 
     private let authSession: AuthSessionStore
     private let profileImageUploadService: any ProfileImageUploadService
+    private let imageProcessor: ImageProcessor
     private var cancellables = Set<AnyCancellable>()
+    /// Preprocessed avatar data ready for upload (100×100 JPEG).
+    private var processedAvatarData: Data?
 
     init(
         authSession: AuthSessionStore,
-        profileImageUploadService: any ProfileImageUploadService
+        profileImageUploadService: any ProfileImageUploadService,
+        imageProcessor: ImageProcessor = ImageProcessor()
     ) {
         self.authSession = authSession
         self.profileImageUploadService = profileImageUploadService
+        self.imageProcessor = imageProcessor
 
         // Initialize from auth session
         name = authSession.userName ?? ""
@@ -77,14 +82,18 @@ final class ProfileViewModel: ObservableObject {
     }
 
     func uploadProfileImage() async {
-        guard let imageData = selectedImageData else { return }
+        guard let userID = authSession.userID else { return }
+        guard let avatarData = processedAvatarData else { return }
         // Fetch current profile image URL from server so we always have the right URL to delete (avoids nil/stale from cache)
         let oldProfileImageURL = await authSession.getCurrentProfileImageURL()
         isLoading = true
         errorMessage = nil
 
         do {
-            let url = try await profileImageUploadService.upload(imageData)
+            let url = try await profileImageUploadService.uploadPreprocessed(
+                avatarData: avatarData,
+                userId: userID
+            )
             try await authSession.updateProfileImage(url.absoluteString)
             // Delete previous profile image from storage to avoid orphaned files
             if let oldURL = oldProfileImageURL {
@@ -93,11 +102,12 @@ final class ProfileViewModel: ObservableObject {
             // Clear selected data after a brief moment to allow UI to update
             // The profileImageURL will be updated via the Combine subscription to authSession
             try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds to allow refresh
+            processedAvatarData = nil
             selectedImageData = nil
             selectedPhoto = nil
         } catch {
             errorMessage = error.localizedDescription
-            // On error, keep selectedImageData so user can try again
+            // On error, keep processedAvatarData so user can try again
         }
 
         isLoading = false
@@ -108,10 +118,24 @@ final class ProfileViewModel: ObservableObject {
     }
 
     private func loadPhoto(_ item: PhotosPickerItem) async {
-        guard let data = try? await item.loadTransferable(type: Data.self) else {
+        guard let rawData = try? await item.loadTransferable(type: Data.self) else {
             return
         }
-        selectedImageData = data
+
+        // Preprocess: center-crop, resize to 100×100, JPEG-encode
+        isLoading = true
+        errorMessage = nil
+        do {
+            let avatarData = try await imageProcessor.processProfileImage(from: rawData)
+            processedAvatarData = avatarData
+            selectedImageData = avatarData  // Use preprocessed data for preview
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+            return
+        }
+        isLoading = false
+
         // Automatically upload when photo is selected
         await uploadProfileImage()
     }
