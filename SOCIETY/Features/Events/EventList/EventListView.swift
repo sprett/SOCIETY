@@ -32,7 +32,8 @@ struct EventListView: View {
         authRepository: any AuthRepository = PreviewAuthRepository(),
         profileRepository: any ProfileRepository = MockProfileRepository(),
         categoryRepository: any CategoryRepository = MockCategoryRepository(),
-        notificationSettingsRepository: any NotificationSettingsRepository = MockNotificationSettingsRepository(),
+        notificationSettingsRepository: any NotificationSettingsRepository =
+            MockNotificationSettingsRepository(),
         eventImageUploadService: any EventImageUploadService = MockEventImageUploadService(),
         profileImageUploadService: any ProfileImageUploadService = MockProfileImageUploadService(),
         rsvpRepository: any RsvpRepository = MockRsvpRepository(),
@@ -55,6 +56,7 @@ struct EventListView: View {
             wrappedValue: EventListViewModel(
                 repository: eventRepository,
                 rsvpRepository: rsvpRepository,
+                profileRepository: profileRepository,
                 locationManager: locationManager,
                 userID: nil
             )
@@ -73,6 +75,10 @@ struct EventListView: View {
         isEventDetailPresented ? 0.12 : 0
     }
 
+    private var showHomeEmptyState: Bool {
+        authSession.userID != nil && viewModel.events.isEmpty && viewModel.nextEvent == nil
+    }
+
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
@@ -81,13 +87,23 @@ struct EventListView: View {
                         Color.clear
                             .frame(height: 68)
 
-                        VStack(alignment: .leading, spacing: 24) {
-                            nextEventSection
-                            attendingSection
+                        if showHomeEmptyState {
+                            VStack(spacing: 0) {
+                                Spacer(minLength: 0)
+                                homeEmptyState
+                                Spacer(minLength: 0)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: UIScreen.main.bounds.height - 180)
+                        } else {
+                            VStack(alignment: .leading, spacing: 24) {
+                                nextEventSection
+                                attendingSection
+                            }
+                            .padding(.top, 12)
+                            .padding(.bottom, 40)
+                            .padding(.horizontal, 20)
                         }
-                        .padding(.top, 12)
-                        .padding(.bottom, 40)
-                        .padding(.horizontal, 20)
                     }
                 }
                 .background(AppColors.background.ignoresSafeArea())
@@ -96,11 +112,13 @@ struct EventListView: View {
                     locationManager.requestLocationPermission()
                     locationManager.getCurrentLocation()
                     viewModel.updateUserID(authSession.userID)
+                    viewModel.loadProfile(fallbackEmail: authSession.userEmail)
                     viewModel.refresh()
                 }
                 .onChange(of: authSession.userID) { _, _ in
                     // Update ViewModel with current userID when auth state changes
                     viewModel.updateUserID(authSession.userID)
+                    viewModel.loadProfile(fallbackEmail: authSession.userEmail)
                     viewModel.refresh()
                 }
 
@@ -168,6 +186,31 @@ struct EventListView: View {
                 requestCreate = false
             }
         }
+    }
+
+    private var homeEmptyState: some View {
+        VStack(spacing: 28) {
+            VStack(spacing: 12) {
+                HStack(spacing: 4) {
+                    Text("Hey ")
+                    Text(viewModel.firstName.isEmpty ? "there" : viewModel.firstName)
+                        .italic()
+                    Text("👋")
+                }
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(AppColors.primaryText)
+
+                Text(
+                    "This is where you'll see events you're attending and the ones you've created. Start by discovering events around you — or create your own."
+                )
+                .font(.subheadline)
+                .foregroundStyle(AppColors.secondaryText)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24)
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
