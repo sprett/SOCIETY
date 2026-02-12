@@ -163,7 +163,15 @@ struct EventListView: View {
                 rsvpRepository: rsvpRepository,
                 authSession: authSession,
                 onDeleted: { viewModel.refresh() },
-                onCoverChanged: { viewModel.refresh() },
+                onCoverChanged: {
+                    Task {
+                        await viewModel.refreshAndUpdateSelected(selectedEventId: event.id)
+                        // Update selectedEvent with the refreshed data
+                        if let updatedEvent = viewModel.event(by: event.id) {
+                            selectedEvent = updatedEvent
+                        }
+                    }
+                },
                 onRsvpChanged: { viewModel.refresh() }
             )
             .presentationDetents([.large])

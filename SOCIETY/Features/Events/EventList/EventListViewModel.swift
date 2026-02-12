@@ -79,6 +79,14 @@ final class EventListViewModel: ObservableObject {
     func refresh() {
         Task { await loadEvents() }
     }
+    
+    func refreshAndUpdateSelected(selectedEventId: UUID) async {
+        await loadEvents()
+    }
+    
+    func event(by id: UUID) -> Event? {
+        return events.first(where: { $0.id == id })
+    }
 
     var nextEvent: Event? {
         let now = Date()

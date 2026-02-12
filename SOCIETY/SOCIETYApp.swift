@@ -29,6 +29,14 @@ struct SOCIETYApp: App {
         .system.rawValue
 
     init() {
+        // Don't replace the global URLCache - let Supabase use its own caching
+        // We'll use a separate URLSession for image loading only
+        
+        // Clean up old cached images on launch
+        Task {
+            await DiskCacheManager.shared.cleanupIfNeeded()
+        }
+        
         Self.configureTabBarAppearance()
 
         do {

@@ -38,6 +38,11 @@ struct SettingsView: View {
         }
         .preferredColorScheme(resolvedColorScheme)
         .animation(.easeInOut(duration: 0.35), value: appearanceMode)
+        .onAppear {
+            Task {
+                await viewModel.loadCacheSize()
+            }
+        }
         .confirmationDialog("Sign Out", isPresented: $viewModel.showSignOutConfirmation, titleVisibility: .visible) {
             Button("Sign Out", role: .destructive) {
                 Task {
@@ -120,6 +125,30 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("Preferences")
+                        .foregroundStyle(AppColors.secondaryText)
+                }
+
+                // Storage
+                Section {
+                    HStack {
+                        Label("Image Cache", systemImage: "photo.stack")
+                            .foregroundStyle(AppColors.primaryText)
+                        Spacer()
+                        Text(viewModel.cacheSize)
+                            .font(.subheadline)
+                            .foregroundStyle(AppColors.secondaryText)
+                    }
+                    
+                    Button {
+                        Task {
+                            await viewModel.clearImageCache()
+                        }
+                    } label: {
+                        Label("Clear Image Cache", systemImage: "trash")
+                            .foregroundStyle(.red)
+                    }
+                } header: {
+                    Text("Storage")
                         .foregroundStyle(AppColors.secondaryText)
                 }
 

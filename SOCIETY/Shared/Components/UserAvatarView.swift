@@ -18,21 +18,14 @@ struct UserAvatarView: View {
 
     var body: some View {
         if let imageURL = imageURL, let url = URL(string: imageURL) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    placeholderView
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: size, height: size)
-                        .clipShape(Circle())
-                case .failure:
-                    placeholderView
-                @unknown default:
-                    placeholderView
-                }
+            CachedAsyncImage(url: url) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+            } placeholder: {
+                placeholderView
             }
         } else {
             placeholderView
