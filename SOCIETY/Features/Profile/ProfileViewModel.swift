@@ -8,6 +8,7 @@
 import Combine
 import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class ProfileViewModel: ObservableObject {
@@ -118,7 +119,21 @@ final class ProfileViewModel: ObservableObject {
     }
 
     private func loadPhoto(_ item: PhotosPickerItem) async {
+        // Reject videos and GIFs; we only support static photo formats (e.g. JPEG, PNG, HEIC).
+        let isVideoOrGif = item.supportedContentTypes.contains { type in
+            type.conforms(to: .movie) || type.conforms(to: .video) || type.conforms(to: .gif)
+        }
+        if isVideoOrGif {
+            selectedPhoto = nil
+            errorMessage = "Please choose a photo only. Videos and GIFs are not supported."
+            return
+        }
         guard let rawData = try? await item.loadTransferable(type: Data.self) else {
+            return
+        }
+        guard UIImage(data: rawData) != nil else {
+            selectedPhoto = nil
+            errorMessage = "Please choose a valid photo. This file format is not supported."
             return
         }
 

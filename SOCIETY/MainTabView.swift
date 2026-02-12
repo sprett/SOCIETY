@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @State private var selectedTab = 0
+    @State private var selectedTab = 1  // Home — first screen after onboarding
     @State private var requestCreate = false
     private let dependencies: AppDependencies
 
