@@ -132,7 +132,15 @@ struct DiscoverView: View {
                 rsvpRepository: rsvpRepository,
                 authSession: authSession,
                 onDeleted: { Task { await viewModel.refresh() } },
-                onCoverChanged: { Task { await viewModel.refresh() } },
+                onCoverChanged: {
+                    Task {
+                        await viewModel.refreshAndUpdateSelected(selectedEventId: event.id)
+                        // Update selectedEvent with the refreshed data
+                        if let updatedEvent = viewModel.event(by: event.id) {
+                            selectedEvent = updatedEvent
+                        }
+                    }
+                },
                 onRsvpChanged: {}
             )
             .presentationDetents([.large])
@@ -470,6 +478,14 @@ final class DiscoverViewModel: ObservableObject {
     func refresh() async {
         await loadCategories()
         await loadEvents()
+    }
+    
+    func refreshAndUpdateSelected(selectedEventId: UUID) async {
+        await refresh()
+    }
+    
+    func event(by id: UUID) -> Event? {
+        return events.first(where: { $0.id == id })
     }
 
     private func loadCategories() async {

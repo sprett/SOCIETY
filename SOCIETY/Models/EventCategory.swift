@@ -32,7 +32,7 @@ extension Color {
         hexSanitized = hexSanitized.hasPrefix("#") ? String(hexSanitized.dropFirst()) : hexSanitized
 
         guard hexSanitized.count == 6,
-              let hexNumber = UInt64(hexSanitized, radix: 16)
+            let hexNumber = UInt64(hexSanitized, radix: 16)
         else { return nil }
 
         let r = Double((hexNumber & 0xFF0000) >> 16) / 255

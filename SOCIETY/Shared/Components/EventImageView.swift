@@ -14,19 +14,12 @@ struct EventImageView: View {
     var body: some View {
         ZStack {
             if isURL {
-                AsyncImage(url: URL(string: imageNameOrURL.eventThumbnailURL)) { phase in
-                    switch phase {
-                    case .empty:
-                        placeholderView
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        placeholderView
-                    @unknown default:
-                        placeholderView
-                    }
+                CachedAsyncImage(url: URL(string: imageNameOrURL.eventThumbnailURL)) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    placeholderView
                 }
             } else {
                 placeholderView

@@ -11,6 +11,7 @@ import SwiftUI
 @MainActor
 final class SettingsViewModel: ObservableObject {
     @Published var showSignOutConfirmation: Bool = false
+    @Published private(set) var cacheSize: String = "Calculating..."
 
     var userName: String { authSession.userName ?? "" }
     var userEmail: String { authSession.userEmail ?? "" }
@@ -24,5 +25,25 @@ final class SettingsViewModel: ObservableObject {
 
     func signOut() async throws {
         try await authSession.signOut()
+    }
+    
+    func loadCacheSize() async {
+        let bytes = await DiskCacheManager.shared.calculateCacheSize()
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        await MainActor.run {
+            cacheSize = formatter.string(fromByteCount: bytes)
+        }
+    }
+    
+    func clearImageCache() async {
+        // Clear in-memory cache
+        await ImageCache.shared.clearAll()
+        
+        // Clear only image disk cache (not all URL cache which includes API responses)
+        await DiskCacheManager.shared.clearAllImageCache()
+        
+        // Update the displayed size
+        await loadCacheSize()
     }
 }

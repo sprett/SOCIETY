@@ -35,4 +35,12 @@ final class FeedViewModel: ObservableObject {
     func refresh() async {
         events = []
     }
+    
+    func refreshAndUpdateSelected(selectedEventId: UUID) async {
+        await refresh()
+    }
+    
+    func event(by id: UUID) -> Event? {
+        return events.first(where: { $0.id == id })
+    }
 }

@@ -50,7 +50,15 @@ struct MapView: View {
                 rsvpRepository: MockRsvpRepository(),
                 authSession: authSession,
                 onDeleted: { viewModel.refresh() },
-                onCoverChanged: { viewModel.refresh() },
+                onCoverChanged: {
+                    Task {
+                        await viewModel.refreshAndUpdateSelected(selectedEventId: event.id)
+                        // Update selectedEvent with the refreshed data
+                        if let updatedEvent = viewModel.event(by: event.id) {
+                            selectedEvent = updatedEvent
+                        }
+                    }
+                },
                 onRsvpChanged: {}
             )
             .presentationDetents([.large])
@@ -235,19 +243,12 @@ struct EventMapImageView: View {
     var body: some View {
         ZStack {
             if isURL {
-                AsyncImage(url: URL(string: imageNameOrURL.eventThumbnailURL)) { phase in
-                    switch phase {
-                    case .empty:
-                        placeholderView
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        placeholderView
-                    @unknown default:
-                        placeholderView
-                    }
+                CachedAsyncImage(url: URL(string: imageNameOrURL.eventThumbnailURL)) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    placeholderView
                 }
             } else {
                 placeholderView
