@@ -23,4 +23,20 @@ alter table public.profiles
 -- set full_name = trim(concat(coalesce(first_name,''), ' ', coalesce(last_name,'')))
 -- where full_name is null and (first_name is not null or last_name is not null);
 
+-- Add unique constraint on username
+alter table public.profiles
+  add constraint profiles_username_unique unique (username);
+
+-- Add check constraint for username validation
+-- Min 3 chars, lowercase only, alphanumeric plus _, -, .
+-- Must start and end with alphanumeric (lowercase letter or number)
+alter table public.profiles
+  add constraint profiles_username_valid check (
+    username is null or (
+      length(trim(username)) >= 3
+      and username ~ '^[a-z0-9][a-z0-9._-]*[a-z0-9]$'
+      and username = lower(username)
+    )
+  );
+
 notify pgrst, 'reload schema';

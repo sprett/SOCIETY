@@ -10,7 +10,6 @@ import SwiftUI
 struct AccountSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: AccountSettingsViewModel
-    @State private var showEditEmail = false
     @State private var showEditPhone = false
     @State private var showEditUsername = false
 
@@ -28,20 +27,13 @@ struct AccountSettingsView: View {
     var body: some View {
         List {
             Section {
-                Button {
-                    showEditEmail = true
-                } label: {
-                    HStack {
-                        Text("Email")
-                            .foregroundStyle(AppColors.primaryText)
-                        Spacer()
-                        Text(viewModel.email.isEmpty ? "—" : viewModel.email)
-                            .foregroundStyle(AppColors.tertiaryText)
-                            .lineLimit(1)
-                        Image(systemName: "pencil")
-                            .font(.caption)
-                            .foregroundStyle(AppColors.secondaryText)
-                    }
+                HStack {
+                    Text("Email")
+                        .foregroundStyle(AppColors.primaryText)
+                    Spacer()
+                    Text(viewModel.email.isEmpty ? "—" : viewModel.email)
+                        .foregroundStyle(AppColors.tertiaryText)
+                        .lineLimit(1)
                 }
                 Button {
                     showEditPhone = true
@@ -104,16 +96,6 @@ struct AccountSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.load()
-        }
-        .sheet(isPresented: $showEditEmail) {
-            EditEmailView(
-                currentEmail: viewModel.email,
-                onSave: { newEmail in
-                    Task { await viewModel.updateEmail(newEmail) }
-                    showEditEmail = false
-                },
-                onDismiss: { showEditEmail = false }
-            )
         }
         .sheet(isPresented: $showEditPhone) {
             EditPhoneNumberView(

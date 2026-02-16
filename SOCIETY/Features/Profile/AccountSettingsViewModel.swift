@@ -86,10 +86,38 @@ final class AccountSettingsViewModel: ObservableObject {
     }
 
     func updateUsername(_ newUsername: String) async {
-        let trimmed = newUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Always convert to lowercase
+        let trimmed = newUsername.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        errorMessage = nil
+        
+        // Validate username format
+        if let error = UsernameValidator.validationError(for: trimmed) {
+            errorMessage = error
+            return
+        }
+        
+        // Check if username is unchanged
+        guard trimmed != username else { return }
+        
+        // Check username availability
+        do {
+            let isAvailable = try await profileRepository.checkUsernameAvailability(
+                trimmed,
+                excludingUserID: authSession.userID
+            )
+            guard isAvailable else {
+                errorMessage = "Username is already taken"
+                return
+            }
+        } catch {
+            errorMessage = "Unable to verify username availability"
+            return
+        }
+        
+        // Update profile
         guard var profile = loadedProfile ?? buildMinimalProfile() else { return }
         profile.username = trimmed
-        errorMessage = nil
+        
         do {
             try await profileRepository.updateProfile(profile)
             loadedProfile = profile
