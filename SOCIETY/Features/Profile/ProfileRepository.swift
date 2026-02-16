@@ -13,6 +13,10 @@ protocol ProfileRepository {
 
     /// Upserts the given profile (id must match current user). Updates profiles table and optionally auth metadata for name/avatar.
     func updateProfile(_ profile: UserProfile) async throws
+    
+    /// Checks if a username is available. Returns true if available, false if taken.
+    /// Optionally excludes a specific user ID (for when user is updating their own username).
+    func checkUsernameAvailability(_ username: String, excludingUserID: UUID?) async throws -> Bool
 }
 
 /// Mock for previews and tests.
@@ -41,5 +45,10 @@ final class MockProfileRepository: ProfileRepository {
 
     func updateProfile(_ profile: UserProfile) async throws {
         stubProfile = profile
+    }
+    
+    func checkUsernameAvailability(_ username: String, excludingUserID: UUID?) async throws -> Bool {
+        // Mock implementation: always return true (available)
+        return true
     }
 }

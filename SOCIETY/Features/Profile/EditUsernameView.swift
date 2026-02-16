@@ -9,6 +9,7 @@ import SwiftUI
 
 struct EditUsernameView: View {
     @State private var username: String
+    @State private var validationError: String?
     @FocusState private var isFocused: Bool
     private let onSave: (String) -> Void
     private let onDismiss: () -> Void
@@ -21,6 +22,14 @@ struct EditUsernameView: View {
         _username = State(initialValue: currentUsername)
         self.onSave = onSave
         self.onDismiss = onDismiss
+    }
+    
+    private var isValid: Bool {
+        UsernameValidator.isValid(username)
+    }
+    
+    private func validate() {
+        validationError = UsernameValidator.validationError(for: username)
     }
 
     var body: some View {
@@ -35,9 +44,22 @@ struct EditUsernameView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .focused($isFocused)
+                            .onChange(of: username) { _, newValue in
+                                // Filter to only allow valid characters: alphanumeric, _, -, .
+                                username = UsernameValidator.filter(newValue)
+                                validate()
+                            }
                     }
                 } header: {
                     Text("Username")
+                } footer: {
+                    if let error = validationError {
+                        Text(error)
+                            .foregroundStyle(AppColors.danger)
+                    } else {
+                        Text("Lowercase only. Start/end with letter or number.")
+                            .foregroundStyle(AppColors.secondaryText)
+                    }
                 }
             }
             .scrollContentBackground(.hidden)
@@ -55,8 +77,8 @@ struct EditUsernameView: View {
                     Button("Save") {
                         onSave(username.trimmingCharacters(in: .whitespacesAndNewlines))
                     }
-                    .foregroundStyle(username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? AppColors.tertiaryText : AppColors.accent)
-                    .disabled(username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .foregroundStyle(isValid ? AppColors.accent : AppColors.tertiaryText)
+                    .disabled(!isValid)
                 }
             }
             .onAppear { isFocused = true }

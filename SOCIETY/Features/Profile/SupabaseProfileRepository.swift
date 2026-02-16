@@ -171,4 +171,28 @@ final class SupabaseProfileRepository: ProfileRepository {
             .upsert(payload)
             .execute()
     }
+    
+    func checkUsernameAvailability(_ username: String, excludingUserID: UUID?) async throws -> Bool {
+        let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        
+        // Query to check if username exists
+        var query = client
+            .from("profiles")
+            .select("id")
+            .ilike("username", pattern: trimmed)
+        
+        // Exclude the current user if specified
+        if let userID = excludingUserID {
+            query = query.neq("id", value: userID.uuidString)
+        }
+        
+        struct UsernameCheck: Decodable {
+            let id: UUID
+        }
+        
+        let results: [UsernameCheck] = try await query.execute().value
+        
+        // If no results, username is available
+        return results.isEmpty
+    }
 }

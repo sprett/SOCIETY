@@ -428,11 +428,22 @@ final class ProfileSetupViewModel: ObservableObject {
     }
 
     /// Auto-generates a username from the full name (lowercase, no spaces).
+    /// Ensures minimum 3 characters and no whitespace.
     private func generateUsername(from name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let cleaned = trimmed.replacingOccurrences(of: " ", with: "")
             .filter { $0.isLetter || $0.isNumber }
-        return cleaned.isEmpty ? "user\(Int.random(in: 1000...9999))" : cleaned
+        
+        // If cleaned name is empty or too short, generate a default username
+        if cleaned.isEmpty {
+            return "user\(Int.random(in: 100...999))"
+        } else if cleaned.count < 3 {
+            // Pad short usernames with random numbers to reach minimum length
+            let randomSuffix = Int.random(in: 10...99)
+            return "\(cleaned)\(randomSuffix)"
+        }
+        
+        return cleaned
     }
 }
 

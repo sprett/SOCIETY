@@ -564,6 +564,9 @@ private struct ProfileContactStepView: View {
                                 .fill(Color(.systemGray6))
                         )
                         .focused($focusedField, equals: .email)
+                        .onChange(of: viewModel.email) { _, newValue in
+                            viewModel.email = newValue.filter { !$0.isWhitespace }
+                        }
                 }
 
                 // Phone with country code dropdown
