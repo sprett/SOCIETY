@@ -151,6 +151,12 @@ struct SOCIETYApp: App {
                         }
                     }
                 }
+                .onOpenURL { url in
+                    guard url.scheme == "dinoh.society" else { return }
+                    Task {
+                        try? await authSession.sessionFromRedirectURL(url)
+                    }
+                }
         }
         .modelContainer(sharedModelContainer)
     }

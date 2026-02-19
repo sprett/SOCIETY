@@ -30,10 +30,11 @@ struct AvatarFinalStepView: View {
     init(
         userId: UUID,
         avatarService: any AvatarService,
+        existingImageURL: String? = nil,
         completionHandler: AvatarStepCompletionHandler
     ) {
         _viewModel = StateObject(
-            wrappedValue: AvatarFinalStepViewModel(userId: userId, avatarService: avatarService)
+            wrappedValue: AvatarFinalStepViewModel(userId: userId, avatarService: avatarService, existingImageURL: existingImageURL)
         )
         self.completion = .handler(completionHandler)
     }
@@ -41,10 +42,11 @@ struct AvatarFinalStepView: View {
     init(
         userId: UUID,
         avatarService: any AvatarService,
+        existingImageURL: String? = nil,
         onContinue: @escaping (_ avatarURL: String) async throws -> Void
     ) {
         _viewModel = StateObject(
-            wrappedValue: AvatarFinalStepViewModel(userId: userId, avatarService: avatarService)
+            wrappedValue: AvatarFinalStepViewModel(userId: userId, avatarService: avatarService, existingImageURL: existingImageURL)
         )
         self.completion = .closure(onContinue)
     }

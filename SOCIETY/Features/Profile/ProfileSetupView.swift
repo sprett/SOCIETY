@@ -68,7 +68,8 @@ struct ProfileSetupView: View {
                         ProfileAvatarFinalStepView(
                             viewModel: viewModel,
                             userId: currentUserID,
-                            avatarService: avatarService
+                            avatarService: avatarService,
+                            existingImageURL: nil
                         )
                         .transition(slideTransition)
                     } else {
@@ -565,28 +566,44 @@ private struct ProfileContactStepView: View {
                 .padding(.bottom, 32)
 
             VStack(alignment: .leading, spacing: 16) {
-                // Email
+                // Email (read-only when signed in with Apple or Google)
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Email")
                         .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(AppColors.secondaryText)
                         .padding(.leading, 4)
 
-                    TextField("your@email.com", text: $viewModel.email)
-                        .font(.system(size: 17))
-                        .textContentType(.emailAddress)
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .padding(16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color(.systemGray6))
-                        )
-                        .focused($focusedField, equals: .email)
-                        .onChange(of: viewModel.email) { _, newValue in
-                            viewModel.email = newValue.filter { !$0.isWhitespace }
-                        }
+                    if viewModel.isEmailFromProvider {
+                        Text(viewModel.email)
+                            .font(.system(size: 17))
+                            .foregroundStyle(AppColors.tertiaryText)
+                            .padding(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color(.systemGray5))
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .strokeBorder(Color(.systemGray4), lineWidth: 1)
+                            }
+                    } else {
+                        TextField("your@email.com", text: $viewModel.email)
+                            .font(.system(size: 17))
+                            .textContentType(.emailAddress)
+                            .keyboardType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .padding(16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color(.systemGray6))
+                            )
+                            .focused($focusedField, equals: .email)
+                            .onChange(of: viewModel.email) { _, newValue in
+                                viewModel.email = newValue.filter { !$0.isWhitespace }
+                            }
+                    }
                 }
 
                 // Phone with country code dropdown
@@ -656,7 +673,7 @@ private struct ProfileContactStepView: View {
         .padding(.top, 32)
         .padding(.bottom, 40)
         .onAppear {
-            focusedField = .email
+            focusedField = viewModel.isEmailFromProvider ? .phone : .email
         }
         .sheet(isPresented: $showCountryPicker) {
             CountryPickerSheet(selectedCountry: $viewModel.selectedCountry)
@@ -731,11 +748,13 @@ private struct ProfileAvatarFinalStepView: View {
     @ObservedObject var viewModel: ProfileSetupViewModel
     let userId: UUID
     let avatarService: any AvatarService
+    var existingImageURL: String?
 
     var body: some View {
         AvatarFinalStepView(
             userId: userId,
             avatarService: avatarService,
+            existingImageURL: existingImageURL,
             completionHandler: viewModel
         )
         .overlay(alignment: .bottom) {

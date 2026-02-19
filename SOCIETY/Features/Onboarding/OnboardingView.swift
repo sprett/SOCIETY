@@ -59,7 +59,8 @@ struct OnboardingView: View {
     private let authRepository: any AuthRepository
     private let authSession: AuthSessionStore
 
-    @State private var isLoading = false
+    @State private var isLoadingApple = false
+    @State private var isLoadingGoogle = false
     @State private var errorMessage: String?
 
     // Entrance animation state: illustration from bottom, text from left (in sync)
@@ -84,9 +85,11 @@ struct OnboardingView: View {
             case .signIn:
                 OnboardingSignInView(
                     authSession: authSession,
-                    isLoading: $isLoading,
+                    isLoadingApple: $isLoadingApple,
+                    isLoadingGoogle: $isLoadingGoogle,
                     errorMessage: $errorMessage,
-                    onSignIn: handleSignInResult
+                    onSignIn: handleSignInResult,
+                    onSignInWithGoogle: handleSignInWithGoogle
                 )
             }
         }
@@ -102,7 +105,7 @@ struct OnboardingView: View {
             let isOnboarding = viewModel.flowStage == .onboarding
             let size: CGFloat = isOnboarding ? 28 : 240
             let x = isOnboarding ? (24 + size / 2) : geo.size.width / 2
-            let y = isOnboarding ? (8 + size / 2) : geo.size.height / 2
+            let y = isOnboarding ? (8 + size / 2) : geo.size.height * 0.32
             Image("OnboardingLogo")
                 .resizable()
                 .renderingMode(.template)
@@ -316,7 +319,7 @@ struct OnboardingView: View {
     private func handleSignInResult(
         _ result: Result<ASAuthorization, Error>
     ) async {
-        isLoading = true
+        isLoadingApple = true
         errorMessage = nil
 
         switch result {
@@ -328,14 +331,14 @@ struct OnboardingView: View {
                     try await authSession.signInWithApple(
                         credential: appleIDCredential)
                     hasCompletedOnboarding = true
-                    isLoading = false
+                    isLoadingApple = false
                 } catch {
                     errorMessage = error.localizedDescription
-                    isLoading = false
+                    isLoadingApple = false
                 }
             } else {
                 errorMessage = "Invalid credential type"
-                isLoading = false
+                isLoadingApple = false
             }
 
         case .failure(let error):
@@ -346,8 +349,20 @@ struct OnboardingView: View {
             } else {
                 errorMessage = error.localizedDescription
             }
-            isLoading = false
+            isLoadingApple = false
         }
+    }
+
+    private func handleSignInWithGoogle() async {
+        isLoadingGoogle = true
+        errorMessage = nil
+        do {
+            try await authSession.signInWithGoogle()
+            hasCompletedOnboarding = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isLoadingGoogle = false
     }
 }
 

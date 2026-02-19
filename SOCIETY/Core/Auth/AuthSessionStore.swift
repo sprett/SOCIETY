@@ -17,6 +17,9 @@ final class AuthSessionStore: ObservableObject {
     @Published private(set) var userGivenName: String?
     @Published private(set) var userFamilyName: String?
     @Published private(set) var profileImageURL: String?
+    @Published private(set) var userBirthdate: Date?
+    /// Identity provider used to sign in: "apple", "google", or nil for email/password.
+    @Published private(set) var identityProvider: String?
 
     /// Cached full profile; when set, display name/email/avatar are derived from it.
     @Published private(set) var currentProfile: UserProfile?
@@ -41,6 +44,8 @@ final class AuthSessionStore: ObservableObject {
         userGivenName = await authRepository.currentUserGivenName()
         userFamilyName = await authRepository.currentUserFamilyName()
         profileImageURL = await authRepository.currentUserProfileImageURL()
+        userBirthdate = await authRepository.currentUserBirthdate()
+        identityProvider = await authRepository.currentUserIdentityProvider()
     }
 
     /// Returns the current profile image URL from the server. Use this when you need the authoritative value (e.g. before replacing the image) rather than the cached published property.
@@ -60,6 +65,16 @@ final class AuthSessionStore: ObservableObject {
 
     func signInWithApple(credential: ASAuthorizationAppleIDCredential) async throws {
         try await authRepository.signInWithApple(credential: credential)
+        await refresh()
+    }
+
+    func signInWithGoogle() async throws {
+        try await authRepository.signInWithGoogle()
+        await refresh()
+    }
+
+    func sessionFromRedirectURL(_ url: URL) async throws {
+        try await authRepository.sessionFromRedirectURL(url)
         await refresh()
     }
 

@@ -15,10 +15,16 @@ protocol AuthRepository {
     func currentUserGivenName() async -> String?
     func currentUserFamilyName() async -> String?
     func currentUserProfileImageURL() async -> String?
+    /// Birthdate from provider (e.g. Google) if available; nil for Apple/email (Google does not return it by default).
+    func currentUserBirthdate() async -> Date?
+    /// Identity provider used to sign in: "apple", "google", or nil for email/password.
+    func currentUserIdentityProvider() async -> String?
 
     func signIn(email: String, password: String) async throws
     func signUp(email: String, password: String) async throws
     func signInWithApple(credential: ASAuthorizationAppleIDCredential) async throws
+    func signInWithGoogle() async throws
+    func sessionFromRedirectURL(_ url: URL) async throws
     func signOut() async throws
     func deleteAccount() async throws
 
@@ -34,9 +40,13 @@ final class PreviewAuthRepository: AuthRepository {
     func currentUserGivenName() async -> String? { nil }
     func currentUserFamilyName() async -> String? { nil }
     func currentUserProfileImageURL() async -> String? { nil }
+    func currentUserBirthdate() async -> Date? { nil }
+    func currentUserIdentityProvider() async -> String? { nil }
     func signIn(email: String, password: String) async throws {}
     func signUp(email: String, password: String) async throws {}
     func signInWithApple(credential: ASAuthorizationAppleIDCredential) async throws {}
+    func signInWithGoogle() async throws {}
+    func sessionFromRedirectURL(_ url: URL) async throws {}
     func signOut() async throws {}
     func deleteAccount() async throws {}
     func updateUserName(_ name: String) async throws {}

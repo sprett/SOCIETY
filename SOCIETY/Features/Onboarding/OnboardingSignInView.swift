@@ -12,9 +12,11 @@ struct OnboardingSignInView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     let authSession: AuthSessionStore
-    @Binding var isLoading: Bool
+    @Binding var isLoadingApple: Bool
+    @Binding var isLoadingGoogle: Bool
     @Binding var errorMessage: String?
     let onSignIn: (Result<ASAuthorization, Error>) async -> Void
+    let onSignInWithGoogle: () async -> Void
 
     // Staggered entrance animation states (logo animates from parent)
     @State private var nameOffset: CGFloat = 20
@@ -57,33 +59,78 @@ struct OnboardingSignInView: View {
 
             // Bottom section: same layout as carousel (dots + Continue) so button sits in same place
             VStack(spacing: 24) {
-                SignInWithAppleButton(
-                    onRequest: { request in
-                        request.requestedScopes = [.fullName, .email]
-                    },
-                    onCompletion: { result in
-                        Task {
-                            await onSignIn(result)
+                ZStack {
+                    SignInWithAppleButton(
+                        onRequest: { request in
+                            request.requestedScopes = [.fullName, .email]
+                        },
+                        onCompletion: { result in
+                            Task {
+                                await onSignIn(result)
+                            }
                         }
+                    )
+                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                    .frame(height: 56)
+                    .cornerRadius(14)
+                    .padding(.horizontal, 40)
+                    .allowsHitTesting(!isLoadingApple)
+
+                    if isLoadingApple {
+                        ProgressView()
+                            .frame(height: 56)
+                            .padding(.horizontal, 40)
                     }
-                )
-                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-                .frame(height: 56)
-                .cornerRadius(14)
+                }
+                .offset(y: buttonOffset)
+                .opacity(buttonOpacity)
+
+                HStack(spacing: 12) {
+                    Rectangle()
+                        .fill(AppColors.divider.opacity(0.8))
+                        .frame(height: 1)
+                    Text("or")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AppColors.tertiaryText)
+                    Rectangle()
+                        .fill(AppColors.divider.opacity(0.8))
+                        .frame(height: 1)
+                }
                 .padding(.horizontal, 40)
                 .offset(y: buttonOffset)
                 .opacity(buttonOpacity)
 
-                if isLoading {
-                    ProgressView()
+                Button {
+                    Task { await onSignInWithGoogle() }
+                } label: {
+                    Group {
+                        if isLoadingGoogle {
+                            ProgressView()
+                        } else {
+                            HStack(spacing: 10) {
+                                Image("GoogleLogo")
+                                    .resizable()
+                                    .renderingMode(.original)
+                                    .frame(width: 24, height: 24)
+                                Text("Continue with Google")
+                                    .font(.system(size: 17, weight: .semibold))
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
                 }
-
-                if let errorMessage = errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(AppColors.danger)
-                        .padding(.horizontal, 40)
+                .buttonStyle(.plain)
+                .foregroundStyle(AppColors.primaryText)
+                .background(AppColors.elevatedSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
                 }
+                .padding(.horizontal, 40)
+                .offset(y: buttonOffset)
+                .opacity(buttonOpacity)
+                .disabled(isLoadingGoogle)
 
                 Text("By continuing, you agree to our\nTerms of Service and Privacy Policy")
                     .font(.system(size: 13, weight: .regular))
@@ -95,6 +142,17 @@ struct OnboardingSignInView: View {
             .padding(.bottom, 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .top) {
+            if let errorMessage = errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(AppColors.danger)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+                    .padding(.top, 12)
+                    .frame(maxWidth: .infinity)
+            }
+        }
         .onAppear {
             runEntranceAnimations()
         }
@@ -122,8 +180,10 @@ struct OnboardingSignInView: View {
 #Preview {
     OnboardingSignInView(
         authSession: AuthSessionStore(authRepository: PreviewAuthRepository()),
-        isLoading: .constant(false),
+        isLoadingApple: .constant(false),
+        isLoadingGoogle: .constant(false),
         errorMessage: .constant(nil),
-        onSignIn: { _ in }
+        onSignIn: { _ in },
+        onSignInWithGoogle: {}
     )
 }
