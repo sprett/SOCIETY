@@ -78,6 +78,12 @@ final class ProfileSetupViewModel: ObservableObject {
             .joined(separator: " ")
     }
 
+    /// True when the user signed in with Apple or Google (email is prefilled and should not be edited).
+    var isEmailFromProvider: Bool {
+        guard let p = authSession.identityProvider else { return false }
+        return p == "apple" || p == "google"
+    }
+
     /// Assembled phone number (dial code + local number) for storage.
     var assembledPhone: String {
         let local = phoneLocal.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -232,6 +238,9 @@ final class ProfileSetupViewModel: ObservableObject {
                 }
                 if email.isEmpty { email = p.email }
             } else {
+                if let authBirthdate = authSession.userBirthdate {
+                    birthday = authBirthdate
+                }
                 // Prefer given_name/family_name from Apple ID
                 if let given = authSession.userGivenName?.trimmingCharacters(in: .whitespacesAndNewlines),
                     !given.isEmpty
@@ -316,7 +325,7 @@ final class ProfileSetupViewModel: ObservableObject {
             if let url = profile.profileImageURL {
                 try? await authSession.updateProfileImage(url)
             }
-            if profile.email != (authSession.userEmail ?? "") {
+            if !isEmailFromProvider && profile.email != (authSession.userEmail ?? "") {
                 try? await authSession.updateUserEmail(profile.email)
             }
             UserDefaults.standard.set(userID.uuidString, forKey: profileSetupCompletedUserIDKey)

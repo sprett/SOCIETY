@@ -24,11 +24,13 @@ final class AvatarFinalStepViewModel: ObservableObject {
 
     private let userId: UUID
     private let avatarService: any AvatarService
+    private let existingImageURL: String?
     private var selectedPhotoData: Data?
 
-    init(userId: UUID, avatarService: any AvatarService) {
+    init(userId: UUID, avatarService: any AvatarService, existingImageURL: String? = nil) {
         self.userId = userId
         self.avatarService = avatarService
+        self.existingImageURL = existingImageURL
         self.dicebearSeed = userId.uuidString
     }
 
@@ -49,6 +51,24 @@ final class AvatarFinalStepViewModel: ObservableObject {
     }
 
     func loadInitialAvatar() async {
+        if let existing = existingImageURL, let url = URL(string: existing) {
+            isGenerating = true
+            generationError = nil
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                if let image = UIImage(data: data) {
+                    selectedUIImage = image
+                    selectedPhotoData = data
+                } else {
+                    generationError = "Could not use profile image."
+                }
+            } catch {
+                generationError = error.localizedDescription
+            }
+            isGenerating = false
+            return
+        }
+
         guard dicebearImageData == nil else {
             isGenerating = false
             return
