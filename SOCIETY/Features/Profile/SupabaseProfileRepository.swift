@@ -171,6 +171,22 @@ final class SupabaseProfileRepository: ProfileRepository {
             .upsert(payload)
             .execute()
     }
+
+    func markOnboardingCompleted(userID: UUID) async throws {
+        struct OnboardingUpdate: Encodable {
+            let onboardingCompleted: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case onboardingCompleted = "onboarding_completed"
+            }
+        }
+
+        try await client
+            .from("profiles")
+            .update(OnboardingUpdate(onboardingCompleted: true))
+            .eq("id", value: userID.uuidString)
+            .execute()
+    }
     
     func checkUsernameAvailability(_ username: String, excludingUserID: UUID?) async throws -> Bool {
         let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

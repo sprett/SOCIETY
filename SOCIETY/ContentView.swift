@@ -11,7 +11,7 @@ import SwiftUI
 /// The app now starts in `SOCIETYApp` -> `MainTabView`.
 struct ContentView: View {
     var body: some View {
-        MainTabView()
+        MainTabView(eventsStore: EventsStore())
     }
 }
 

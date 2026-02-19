@@ -6,9 +6,7 @@
 //
 
 import Combine
-import PhotosUI
 import SwiftUI
-import UniformTypeIdentifiers
 import UserNotifications
 
 /// UserDefaults key: value is the UUID string of the user who completed profile setup.
@@ -49,8 +47,6 @@ final class ProfileSetupViewModel: ObservableObject {
     @Published var phoneLocal: String = ""
     @Published var selectedCountry: CountryPhoneCode = .norway
     @Published var profileImageURL: String?
-    @Published var selectedPhoto: PhotosPickerItem?
-    @Published var selectedImageData: Data?
 
     // MARK: Interests
 
@@ -70,12 +66,7 @@ final class ProfileSetupViewModel: ObservableObject {
     private let authSession: AuthSessionStore
     private let profileRepository: any ProfileRepository
     private let categoryRepository: any CategoryRepository
-    private let profileImageUploadService: any ProfileImageUploadService
-    private let imageProcessor: ImageProcessor
-    private var cancellables = Set<AnyCancellable>()
     private var loadedProfile: UserProfile?
-    /// Preprocessed avatar data ready for upload (100×100 JPEG).
-    private var processedAvatarData: Data?
 
     // MARK: Computed helpers
 
@@ -124,24 +115,11 @@ final class ProfileSetupViewModel: ObservableObject {
     init(
         authSession: AuthSessionStore,
         profileRepository: any ProfileRepository,
-        categoryRepository: any CategoryRepository,
-        profileImageUploadService: any ProfileImageUploadService,
-        imageProcessor: ImageProcessor = ImageProcessor()
+        categoryRepository: any CategoryRepository
     ) {
         self.authSession = authSession
         self.profileRepository = profileRepository
         self.categoryRepository = categoryRepository
-        self.profileImageUploadService = profileImageUploadService
-        self.imageProcessor = imageProcessor
-
-        $selectedPhoto
-            .compactMap { $0 }
-            .sink { [weak self] item in
-                Task { @MainActor in
-                    await self?.loadPhoto(item)
-                }
-            }
-            .store(in: &cancellables)
     }
 
     // MARK: Step navigation
@@ -284,7 +262,12 @@ final class ProfileSetupViewModel: ObservableObject {
 
     // MARK: Complete setup (save to backend)
 
-    func completeSetup() async {
+    /// Completes profile setup. Pass `avatarURL` from the avatar step to avoid updating
+    /// published state from the view closure (which can cause re-entrant body evaluation and crashes).
+    func completeSetup(avatarURL: String? = nil) async {
+        if let avatarURL {
+            profileImageURL = avatarURL
+        }
         guard let userID = authSession.userID else { return }
 
         let first = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -327,6 +310,7 @@ final class ProfileSetupViewModel: ObservableObject {
 
         do {
             try await profileRepository.updateProfile(profile)
+            try await profileRepository.markOnboardingCompleted(userID: userID)
             authSession.setCurrentProfile(profile)
             try await authSession.updateUserName(profile.fullName)
             if let url = profile.profileImageURL {
@@ -342,70 +326,6 @@ final class ProfileSetupViewModel: ObservableObject {
         }
 
         isSaving = false
-    }
-
-    // MARK: Photo handling
-
-    private func loadPhoto(_ item: PhotosPickerItem) async {
-        // Reject videos and GIFs; we only support static photo formats (e.g. JPEG, PNG, HEIC).
-        let isVideoOrGif = item.supportedContentTypes.contains { type in
-            type.conforms(to: .movie) || type.conforms(to: .video) || type.conforms(to: .gif)
-        }
-        if isVideoOrGif {
-            selectedPhoto = nil
-            errorMessage = "Please choose a photo only. Videos and GIFs are not supported."
-            return
-        }
-        guard let rawData = try? await item.loadTransferable(type: Data.self) else { return }
-        guard UIImage(data: rawData) != nil else {
-            selectedPhoto = nil
-            errorMessage = "Please choose a valid photo. This file format is not supported."
-            return
-        }
-
-        // Preprocess: center-crop, resize to 100×100, JPEG-encode
-        isLoading = true
-        errorMessage = nil
-        do {
-            let avatarData = try await imageProcessor.processProfileImage(from: rawData)
-            processedAvatarData = avatarData
-            selectedImageData = avatarData  // Use preprocessed data for preview
-        } catch {
-            errorMessage = error.localizedDescription
-            isLoading = false
-            return
-        }
-        isLoading = false
-
-        await uploadProfileImage()
-    }
-
-    private func uploadProfileImage() async {
-        guard let userID = authSession.userID else { return }
-        guard let avatarData = processedAvatarData else { return }
-        let oldProfileImageURL = await authSession.getCurrentProfileImageURL()
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            let url = try await profileImageUploadService.uploadPreprocessed(
-                avatarData: avatarData,
-                userId: userID
-            )
-            profileImageURL = url.absoluteString
-            try await authSession.updateProfileImage(url.absoluteString)
-            if let oldURL = oldProfileImageURL {
-                await profileImageUploadService.deleteFromStorageIfOwned(url: oldURL)
-            }
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            processedAvatarData = nil
-            selectedImageData = nil
-            selectedPhoto = nil
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-
-        isLoading = false
     }
 
     // MARK: Helpers
@@ -446,6 +366,8 @@ final class ProfileSetupViewModel: ObservableObject {
         return cleaned
     }
 }
+
+extension ProfileSetupViewModel: AvatarStepCompletionHandler {}
 
 // MARK: - Helper
 

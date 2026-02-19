@@ -10,6 +10,7 @@ import Supabase
 
 struct AppDependencies {
     let supabase: SupabaseClient
+    let appActivityService: AppActivityService
     let authRepository: any AuthRepository
     let profileRepository: any ProfileRepository
     let categoryRepository: any CategoryRepository
@@ -18,6 +19,7 @@ struct AppDependencies {
     let rsvpRepository: any RsvpRepository
     let eventImageUploadService: any EventImageUploadService
     let profileImageUploadService: any ProfileImageUploadService
+    let avatarService: any AvatarService
     let imageProcessor: ImageProcessor
     let locationManager: LocationManager
 }
@@ -29,8 +31,10 @@ extension AppDependencies {
             supabaseKey: "preview",
             options: SupabaseClientOptions(auth: .init(emitLocalSessionAsInitialSession: true))
         )
+        let locationManager = LocationManager()
         return AppDependencies(
             supabase: supabase,
+            appActivityService: AppActivityService(client: supabase, locationManager: locationManager),
             authRepository: PreviewAuthRepository(),
             profileRepository: MockProfileRepository(),
             categoryRepository: MockCategoryRepository(),
@@ -39,8 +43,9 @@ extension AppDependencies {
             rsvpRepository: MockRsvpRepository(),
             eventImageUploadService: MockEventImageUploadService(),
             profileImageUploadService: MockProfileImageUploadService(),
+            avatarService: MockAvatarService(),
             imageProcessor: ImageProcessor(),
-            locationManager: LocationManager()
+            locationManager: locationManager
         )
     }
 }

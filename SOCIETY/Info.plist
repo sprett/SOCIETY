@@ -5,7 +5,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Select an image for your event</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>We need your location to show events near you on the map</string>
+	<string>We use your location to show events near you on the map and to display your approximate location on our admin activity map.</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>sb_publishable_V3wfriXX2yEkfN27dvrO3w_87RHs4kc</string>
 	<key>SUPABASE_URL</key>

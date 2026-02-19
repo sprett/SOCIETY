@@ -22,6 +22,7 @@ struct EventListView: View {
     private let profileImageUploadService: any ProfileImageUploadService
     private let rsvpRepository: any RsvpRepository
     @ObservedObject private var locationManager: LocationManager
+    @ObservedObject private var eventsStore: EventsStore
 
     @State private var selectedEvent: Event?
     @State private var isCreatePresented: Bool = false
@@ -37,6 +38,7 @@ struct EventListView: View {
         eventImageUploadService: any EventImageUploadService = MockEventImageUploadService(),
         profileImageUploadService: any ProfileImageUploadService = MockProfileImageUploadService(),
         rsvpRepository: any RsvpRepository = MockRsvpRepository(),
+        eventsStore: EventsStore,
         locationManager: LocationManager,
         requestCreate: Binding<Bool> = .constant(false)
     ) {
@@ -48,6 +50,7 @@ struct EventListView: View {
         self.eventImageUploadService = eventImageUploadService
         self.profileImageUploadService = profileImageUploadService
         self.rsvpRepository = rsvpRepository
+        _eventsStore = ObservedObject(wrappedValue: eventsStore)
         _locationManager = ObservedObject(wrappedValue: locationManager)
         _requestCreate = requestCreate
         // Note: userID will be set via onChange of authSession.userID
@@ -58,6 +61,7 @@ struct EventListView: View {
                 rsvpRepository: rsvpRepository,
                 profileRepository: profileRepository,
                 locationManager: locationManager,
+                eventsStore: eventsStore,
                 userID: nil
             )
         )
@@ -76,7 +80,16 @@ struct EventListView: View {
     }
 
     private var showHomeEmptyState: Bool {
-        authSession.userID != nil && viewModel.events.isEmpty && viewModel.nextEvent == nil
+        authSession.userID != nil
+            && !showEventsLoadingOverlay
+            && viewModel.events.isEmpty
+            && viewModel.nextEvent == nil
+    }
+
+    private var showEventsLoadingOverlay: Bool {
+        authSession.userID != nil
+            && eventsStore.isLoadingInitialData
+            && viewModel.events.isEmpty
     }
 
     var body: some View {
@@ -113,13 +126,22 @@ struct EventListView: View {
                     locationManager.getCurrentLocation()
                     viewModel.updateUserID(authSession.userID)
                     viewModel.loadProfile(fallbackEmail: authSession.userEmail)
-                    viewModel.refresh()
+                    viewModel.setEventsFromStore(eventsStore.events)
+                    if !eventsStore.isLoadingInitialData || eventsStore.loadError != nil {
+                        viewModel.refresh()
+                    }
                 }
                 .onChange(of: authSession.userID) { _, _ in
                     // Update ViewModel with current userID when auth state changes
                     viewModel.updateUserID(authSession.userID)
                     viewModel.loadProfile(fallbackEmail: authSession.userEmail)
-                    viewModel.refresh()
+                    viewModel.setEventsFromStore(eventsStore.events)
+                    if !eventsStore.isLoadingInitialData || eventsStore.loadError != nil {
+                        viewModel.refresh()
+                    }
+                }
+                .onReceive(eventsStore.$events) { cachedEvents in
+                    viewModel.setEventsFromStore(cachedEvents)
                 }
 
                 header
@@ -128,6 +150,21 @@ struct EventListView: View {
                     .padding(.bottom, 12)
                     .frame(maxWidth: .infinity)
                     .allowsHitTesting(true)
+
+                if showEventsLoadingOverlay {
+                    VStack(spacing: 10) {
+                        ProgressView()
+                        Text("Loading events…")
+                            .font(.footnote)
+                            .foregroundStyle(AppColors.secondaryText)
+                    }
+                    .padding(16)
+                    .background(
+                        .ultraThinMaterial,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    )
+                    .padding(.top, 110)
+                }
             }
         }
         .tint(AppColors.primaryText)
@@ -332,6 +369,6 @@ struct EventListView: View {
 }
 
 #Preview {
-    EventListView(locationManager: LocationManager())
+    EventListView(eventsStore: EventsStore(), locationManager: LocationManager())
         .environmentObject(AuthSessionStore(authRepository: PreviewAuthRepository()))
 }

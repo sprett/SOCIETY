@@ -19,6 +19,7 @@ final class EventListViewModel: ObservableObject {
     private let rsvpRepository: any RsvpRepository
     private let profileRepository: any ProfileRepository
     private let locationManager: LocationManager
+    private let eventsStore: EventsStore?
     @Published private(set) var userID: UUID?
 
     init(
@@ -26,13 +27,18 @@ final class EventListViewModel: ObservableObject {
         rsvpRepository: any RsvpRepository,
         profileRepository: any ProfileRepository,
         locationManager: LocationManager,
+        eventsStore: EventsStore? = nil,
         userID: UUID?
     ) {
         self.repository = repository
         self.rsvpRepository = rsvpRepository
         self.profileRepository = profileRepository
         self.locationManager = locationManager
+        self.eventsStore = eventsStore
         self.userID = userID
+        if let eventsStore {
+            events = eventsStore.events
+        }
     }
 
     func updateUserID(_ newUserID: UUID?) {
@@ -61,6 +67,7 @@ final class EventListViewModel: ObservableObject {
     private func loadEvents() async {
         guard let userID = userID else {
             events = []
+            eventsStore?.clear()
             return
         }
 
@@ -68,16 +75,23 @@ final class EventListViewModel: ObservableObject {
             let eventIds = try await rsvpRepository.fetchEventIdsAttending(userId: userID)
             if eventIds.isEmpty {
                 events = []
+                eventsStore?.replaceCachedEvents([])
             } else {
                 events = try await repository.fetchEvents(ids: eventIds)
+                eventsStore?.replaceCachedEvents(events)
             }
         } catch {
             events = []
+            eventsStore?.replaceCachedEvents([])
         }
     }
 
     func refresh() {
         Task { await loadEvents() }
+    }
+
+    func setEventsFromStore(_ cachedEvents: [Event]) {
+        events = cachedEvents
     }
     
     func refreshAndUpdateSelected(selectedEventId: UUID) async {

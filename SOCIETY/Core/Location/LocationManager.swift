@@ -47,6 +47,30 @@ final class LocationManager: NSObject, ObservableObject {
         }
         locationManager.requestLocation()
     }
+
+    /// One-shot location request for activity reporting. Returns coordinates when available, or nil after timeout.
+    func requestLocationOnce() async -> CLLocationCoordinate2D? {
+        if authorizationStatus == .notDetermined {
+            requestLocationPermission()
+            for _ in 0..<30 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                if authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways {
+                    break
+                }
+            }
+        }
+        guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
+            return nil
+        }
+        locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        locationManager.requestLocation()
+
+        for _ in 0..<50 {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            if let coord = userLocation { return coord }
+        }
+        return nil
+    }
 }
 
 extension LocationManager: CLLocationManagerDelegate {

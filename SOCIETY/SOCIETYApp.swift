@@ -14,30 +14,26 @@ import UIKit
 struct SOCIETYApp: App {
     private let dependencies: AppDependencies
     @StateObject private var authSession: AuthSessionStore
-    @AppStorage("hasCompletedOnboardingV2") private var hasCompletedOnboardingStorage = false
-
-    /// In DEBUG, always false so onboarding shows on every launch for easier development.
-    private var effectiveHasCompletedOnboarding: Bool {
-        #if DEBUG
-            return false
-        #else
-            return hasCompletedOnboardingStorage
-        #endif
-    }
-    @AppStorage(profileSetupCompletedUserIDKey) private var profileSetupCompletedUserID: String = ""
+    @StateObject private var eventsStore: EventsStore
+    @StateObject private var launchManager: LaunchManager
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var heartbeatTask: Task<Void, Never>?
     @AppStorage(AppearanceMode.storageKey) private var appearanceMode: String = AppearanceMode
         .system.rawValue
 
     init() {
         // Don't replace the global URLCache - let Supabase use its own caching
         // We'll use a separate URLSession for image loading only
-        
+
         // Clean up old cached images on launch
         Task {
             await DiskCacheManager.shared.cleanupIfNeeded()
         }
-        
+
         Self.configureTabBarAppearance()
+
+        let resolvedDependencies: AppDependencies
+        let resolvedAuthSession: AuthSessionStore
 
         do {
             let config = try AppConfig.load()
@@ -48,12 +44,13 @@ struct SOCIETYApp: App {
             )
 
             let authRepository = SupabaseAuthRepository(client: supabase)
-            _authSession = StateObject(
-                wrappedValue: AuthSessionStore(authRepository: authRepository))
+            resolvedAuthSession = AuthSessionStore(authRepository: authRepository)
 
             let imageProcessor = ImageProcessor()
-            self.dependencies = AppDependencies(
+            let locationManager = LocationManager()
+            resolvedDependencies = AppDependencies(
                 supabase: supabase,
+                appActivityService: AppActivityService(client: supabase, locationManager: locationManager),
                 authRepository: authRepository,
                 profileRepository: SupabaseProfileRepository(client: supabase),
                 categoryRepository: SupabaseCategoryRepository(client: supabase),
@@ -62,16 +59,29 @@ struct SOCIETYApp: App {
                 rsvpRepository: SupabaseRsvpRepository(client: supabase),
                 eventImageUploadService: SupabaseEventImageUploadService(client: supabase, imageProcessor: imageProcessor),
                 profileImageUploadService: SupabaseProfileImageUploadService(client: supabase, imageProcessor: imageProcessor),
+                avatarService: SupabaseAvatarService(client: supabase, imageProcessor: imageProcessor),
                 imageProcessor: imageProcessor,
-                locationManager: LocationManager()
+                locationManager: locationManager
             )
         } catch {
             // Fallback for previews / misconfigurations.
             let preview = AppDependencies.preview()
-            _authSession = StateObject(
-                wrappedValue: AuthSessionStore(authRepository: preview.authRepository))
-            self.dependencies = preview
+            resolvedDependencies = preview
+            resolvedAuthSession = AuthSessionStore(authRepository: preview.authRepository)
         }
+
+        let resolvedEventsStore = EventsStore()
+
+        self.dependencies = resolvedDependencies
+        _authSession = StateObject(wrappedValue: resolvedAuthSession)
+        _eventsStore = StateObject(wrappedValue: resolvedEventsStore)
+        _launchManager = StateObject(
+            wrappedValue: LaunchManager(
+                dependencies: resolvedDependencies,
+                authSession: resolvedAuthSession,
+                eventsStore: resolvedEventsStore
+            )
+        )
     }
 
     private static func configureTabBarAppearance() {
@@ -110,53 +120,152 @@ struct SOCIETYApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Group {
-                if authSession.isAuthenticated {
-                    if profileSetupCompletedUserID == authSession.userID?.uuidString {
-                        MainTabView(dependencies: dependencies)
-                            .environmentObject(authSession)
+            rootView
+                .environmentObject(authSession)
+                .preferredColorScheme(preferredColorScheme)
+                .animation(.easeInOut(duration: 0.35), value: appearanceMode)
+                .onAppear {
+                    applyWindowAppearance()
+                    launchManager.start()
+                    if isActivityReportingEnabled, scenePhase == .active {
+                        Task { await dependencies.appActivityService.reportActivity() }
+                        startHeartbeat()
+                    }
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    handleScenePhaseChange(newPhase)
+                }
+                .onChange(of: launchManager.state) { _, _ in
+                    if isActivityReportingEnabled, scenePhase == .active {
+                        Task { await dependencies.appActivityService.reportActivity() }
+                        startHeartbeat()
                     } else {
-                        NavigationStack {
-                            ProfileSetupView(
-                                authSession: authSession,
-                                profileRepository: dependencies.profileRepository,
-                                categoryRepository: dependencies.categoryRepository,
-                                profileImageUploadService: dependencies.profileImageUploadService
-                            )
+                        cancelHeartbeat()
+                    }
+                }
+                .onChange(of: appearanceMode) { _, newValue in
+                    applyWindowAppearance()
+                    if AppearanceMode(rawValue: newValue) == .system {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            applyWindowAppearance()
                         }
-                        .environmentObject(authSession)
-                    }
-                } else {
-                    if effectiveHasCompletedOnboarding {
-                        WelcomeView(
-                            authRepository: dependencies.authRepository,
-                            authSession: authSession
-                        )
-                    } else {
-                        OnboardingView(
-                            authRepository: dependencies.authRepository,
-                            authSession: authSession
-                        )
                     }
                 }
-            }
-            .preferredColorScheme(preferredColorScheme)
-            .animation(.easeInOut(duration: 0.35), value: appearanceMode)
-            .onAppear { applyWindowAppearance() }
-            .onChange(of: appearanceMode) { _, newValue in
-                applyWindowAppearance()
-                if AppearanceMode(rawValue: newValue) == .system {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        applyWindowAppearance()
-                    }
-                }
-            }
         }
         .modelContainer(sharedModelContainer)
     }
 
+    @ViewBuilder
+    private var rootView: some View {
+        switch launchManager.state {
+        case .splash:
+            SplashView()
+
+        case .unauthenticated:
+            OnboardingView(
+                authRepository: dependencies.authRepository,
+                authSession: authSession
+            )
+
+        case .onboardingRequired:
+            NavigationStack {
+                ProfileSetupView(
+                    authSession: authSession,
+                    profileRepository: dependencies.profileRepository,
+                    categoryRepository: dependencies.categoryRepository,
+                    avatarService: dependencies.avatarService,
+                    onCompleted: {
+                        launchManager.handleOnboardingCompleted()
+                    }
+                )
+            }
+
+        case .authenticatedReady:
+            MainTabView(
+                dependencies: dependencies,
+                eventsStore: eventsStore
+            )
+
+        case .accountDeleted:
+            AccountDeletedView(onStartOver: {
+                Task {
+                    try? await authSession.signOut()
+                }
+            })
+
+        case .accountDisabled(let reason):
+            AccountDisabledView(
+                reason: reason,
+                onSignOut: {
+                    Task {
+                        do {
+                            try await authSession.signOut()
+                        } catch {
+                            // Keep UX simple: still rerun launch gate.
+                        }
+                        launchManager.retry()
+                    }
+                },
+                onContactSupport: {
+                    // Stub action for now.
+                }
+            )
+
+        case .error(let message):
+            LaunchErrorView(
+                message: message,
+                onRetry: {
+                    launchManager.retry()
+                }
+            )
+        }
+    }
+
     private var preferredColorScheme: ColorScheme? {
         AppearanceMode(rawValue: appearanceMode)?.colorScheme
+    }
+
+    private var isActivityReportingEnabled: Bool {
+        if case .authenticatedReady = launchManager.state {
+            return authSession.isAuthenticated
+        }
+        return false
+    }
+
+    /// Report app activity on foreground and run heartbeat while active for admin dashboard (users_online, last_app_open_at).
+    private func handleScenePhaseChange(_ phase: ScenePhase) {
+        guard isActivityReportingEnabled else {
+            cancelHeartbeat()
+            return
+        }
+
+        switch phase {
+        case .active:
+            Task { await dependencies.appActivityService.reportActivity() }
+            Task { await launchManager.validateAccountStatus() }
+            startHeartbeat()
+        case .inactive, .background:
+            cancelHeartbeat()
+        @unknown default:
+            break
+        }
+    }
+
+    private func startHeartbeat() {
+        cancelHeartbeat()
+        heartbeatTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3 * 60 * 1_000_000_000) // 3 min
+                guard !Task.isCancelled else { break }
+                await dependencies.appActivityService.reportActivity()
+                await launchManager.validateAccountStatus()
+            }
+        }
+    }
+
+    private func cancelHeartbeat() {
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
     }
 
     /// Apply appearance to all windows so sheets (e.g. Settings) update when switching to System.

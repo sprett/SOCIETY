@@ -93,11 +93,6 @@ struct OnboardingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColors.background.ignoresSafeArea())
         .overlay { onboardingLogoTransitionOverlay }
-        .onChange(of: viewModel.flowStage) { _, newStage in
-            if newStage == .signIn {
-                hasCompletedOnboarding = true
-            }
-        }
     }
 
     // MARK: - Logo transition (top-left → center when tapping Get Started)
@@ -321,7 +316,6 @@ struct OnboardingView: View {
     private func handleSignInResult(
         _ result: Result<ASAuthorization, Error>
     ) async {
-        hasCompletedOnboarding = true
         isLoading = true
         errorMessage = nil
 
@@ -333,6 +327,7 @@ struct OnboardingView: View {
                 do {
                     try await authSession.signInWithApple(
                         credential: appleIDCredential)
+                    hasCompletedOnboarding = true
                     isLoading = false
                 } catch {
                     errorMessage = error.localizedDescription
