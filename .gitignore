@@ -17,3 +17,11 @@ xcuserdata/
 .env
 .env.*
 !.env.example
+
+## Admin dashboard (Node / Vite)
+admin/node_modules/
+admin/dist/
+admin/.env
+admin/.env.local
+admin/.env.*.local
+!admin/.env.example

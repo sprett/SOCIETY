@@ -3,29 +3,34 @@
 //  SOCIETY
 //
 //  Stepped profile setup flow:
-//  location → notifications → name → birthday → contact → photo
+//  interests → location → notifications → name → birthday → contact → avatar
 //
 
 import CoreLocation
-import PhotosUI
 import SwiftUI
 import UserNotifications
 
 struct ProfileSetupView: View {
     @StateObject private var viewModel: ProfileSetupViewModel
+    private let currentUserID: UUID?
+    private let avatarService: any AvatarService
+    private let onCompleted: () -> Void
 
     init(
         authSession: AuthSessionStore,
         profileRepository: any ProfileRepository,
         categoryRepository: any CategoryRepository,
-        profileImageUploadService: any ProfileImageUploadService
+        avatarService: any AvatarService,
+        onCompleted: @escaping () -> Void = {}
     ) {
+        self.currentUserID = authSession.userID
+        self.avatarService = avatarService
+        self.onCompleted = onCompleted
         _viewModel = StateObject(
             wrappedValue: ProfileSetupViewModel(
                 authSession: authSession,
                 profileRepository: profileRepository,
-                categoryRepository: categoryRepository,
-                profileImageUploadService: profileImageUploadService
+                categoryRepository: categoryRepository
             ))
     }
 
@@ -59,8 +64,18 @@ struct ProfileSetupView: View {
                     ProfileContactStepView(viewModel: viewModel)
                         .transition(slideTransition)
                 case .photo:
-                    ProfilePhotoStepView(viewModel: viewModel)
+                    if let currentUserID {
+                        ProfileAvatarFinalStepView(
+                            viewModel: viewModel,
+                            userId: currentUserID,
+                            avatarService: avatarService
+                        )
                         .transition(slideTransition)
+                    } else {
+                        Text("Please sign in again.")
+                            .foregroundStyle(AppColors.secondaryText)
+                            .transition(slideTransition)
+                    }
                 }
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.currentStep)
@@ -69,6 +84,11 @@ struct ProfileSetupView: View {
         .background(AppColors.background.ignoresSafeArea())
         .task {
             await viewModel.load()
+        }
+        .onChange(of: viewModel.setupSucceeded) { _, succeeded in
+            if succeeded {
+                onCompleted()
+            }
         }
         .overlay {
             if viewModel.isLoading {
@@ -705,111 +725,27 @@ private struct CountryPickerSheet: View {
     }
 }
 
-// MARK: - Photo Step
+// MARK: - Avatar Final Step
 
-private struct ProfilePhotoStepView: View {
+private struct ProfileAvatarFinalStepView: View {
     @ObservedObject var viewModel: ProfileSetupViewModel
+    let userId: UUID
+    let avatarService: any AvatarService
 
     var body: some View {
-        VStack(spacing: 0) {
-            Text("Add a photo")
-                .font(.system(size: 34, weight: .bold))
-                .tracking(-0.4)
-                .foregroundStyle(AppColors.primaryText)
-                .padding(.bottom, 12)
-
-            Text("Help friends recognize you")
-                .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(AppColors.secondaryText)
-                .padding(.bottom, 48)
-
-            // Photo upload area
-            ZStack(alignment: .bottomTrailing) {
-                if let imageData = viewModel.selectedImageData,
-                    let uiImage = UIImage(data: imageData)
-                {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 160, height: 160)
-                        .clipShape(Circle())
-                } else if let url = viewModel.profileImageURL {
-                    UserAvatarView(imageURL: url, size: 160)
-                } else {
-                    Circle()
-                        .fill(Color(.systemGray6))
-                        .frame(width: 160, height: 160)
-                        .overlay {
-                            Image(systemName: "camera")
-                                .font(.system(size: 48))
-                                .foregroundStyle(AppColors.secondaryText)
-                        }
-                }
-
-                PhotosPicker(
-                    selection: $viewModel.selectedPhoto,
-                    matching: .images,
-                    photoLibrary: .shared()
-                ) {
-                    Image(systemName: "camera.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(AppColors.primaryText)
-                        .frame(width: 40, height: 40)
-                        .background(AppColors.elevatedSurface, in: Circle())
-                        .overlay {
-                            Circle()
-                                .strokeBorder(AppColors.divider, lineWidth: 1)
-                        }
-                }
-                .disabled(viewModel.isLoading)
-            }
-            .padding(.bottom, 24)
-
-            // Choose from library text button
-            PhotosPicker(
-                selection: $viewModel.selectedPhoto,
-                matching: .images,
-                photoLibrary: .shared()
-            ) {
-                Text("Choose from library")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(AppColors.primaryText)
-            }
-            .disabled(viewModel.isLoading)
-
-            Spacer()
-
+        AvatarFinalStepView(
+            userId: userId,
+            avatarService: avatarService,
+            completionHandler: viewModel
+        )
+        .overlay(alignment: .bottom) {
             if let msg = viewModel.errorMessage {
                 Text(msg)
                     .font(.footnote)
                     .foregroundStyle(AppColors.danger)
-                    .padding(.bottom, 8)
-            }
-
-            // Buttons
-            VStack(spacing: 12) {
-                ProfileContinueButton(
-                    enabled: !viewModel.isSaving,
-                    isLoading: viewModel.isSaving
-                ) {
-                    Task { await viewModel.completeSetup() }
-                }
-
-                Button {
-                    Task { await viewModel.completeSetup() }
-                } label: {
-                    Text("Skip for now")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(AppColors.secondaryText)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .disabled(viewModel.isSaving)
+                    .padding(.bottom, 108)
             }
         }
-        .padding(.horizontal, 32)
-        .padding(.top, 32)
-        .padding(.bottom, 40)
     }
 }
 
@@ -901,7 +837,7 @@ private struct ProfileScaleOnPressStyle: ButtonStyle {
             authSession: AuthSessionStore(authRepository: PreviewAuthRepository()),
             profileRepository: MockProfileRepository(),
             categoryRepository: MockCategoryRepository(),
-            profileImageUploadService: MockProfileImageUploadService()
+            avatarService: MockAvatarService()
         )
     }
 }

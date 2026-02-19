@@ -6,3 +6,13 @@
 # We validate the user's JWT inside the function with auth.getUser().
 [functions.delete-account]
 verify_jwt = false
+
+# Same rationale as delete-account: this function validates the caller JWT via auth.getUser()
+# and then enforces profiles.role = admin before performing destructive actions.
+[functions.admin-delete-user]
+verify_jwt = false
+
+# Bypass gateway JWT check so request reaches our code. We validate JWT via auth.getUser().
+# Mobile clients can have edge cases with token forwarding.
+[functions.report-app-activity]
+verify_jwt = false
