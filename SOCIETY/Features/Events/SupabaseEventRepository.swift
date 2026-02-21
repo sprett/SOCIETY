@@ -17,10 +17,16 @@ final class SupabaseEventRepository: EventRepository {
     }
 
     func fetchEvents() async throws -> [Event] {
+        let now = Date()
+        let nowString = ISO8601DateFormatter().string(from: now)
+        let startOfToday = Calendar.current.startOfDay(for: now)
+        let startOfTodayString = ISO8601DateFormatter().string(from: startOfToday)
         let rows: [EventDBRow] =
             try await client
             .from("events")
             .select()
+            .gte("end_at", value: nowString)
+            .gte("start_at", value: startOfTodayString)
             .order("start_at", ascending: true)
             .execute()
             .value

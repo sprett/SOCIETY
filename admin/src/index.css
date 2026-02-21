@@ -45,7 +45,7 @@
   }
 
   .dark {
-    /* Template-equivalent dark palette (HSL), sidebar vars */
+    /* Template-equivalent dark palette (HSL), higher contrast for readability */
     --background: 0 0% 14%;
     --foreground: 0 0% 98%;
     --card: 0 0% 21%;
@@ -57,13 +57,13 @@
     --secondary: 0 0% 27%;
     --secondary-foreground: 0 0% 98%;
     --muted: 0 0% 27%;
-    --muted-foreground: 0 0% 71%;
+    --muted-foreground: 0 0% 82%;
     --accent: 0 0% 27%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 60% 55%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 18%;
-    --input: 0 0% 18%;
+    --border: 0 0% 30%;
+    --input: 0 0% 30%;
     --ring: 0 0% 56%;
     --chart-1: 264 55% 48%;
     --chart-2: 162 55% 55%;
@@ -76,7 +76,7 @@
     --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 0 0% 27%;
     --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 0 0% 18%;
+    --sidebar-border: 0 0% 30%;
     --sidebar-ring: 0 0% 56%;
   }
 }

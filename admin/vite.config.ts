@@ -186,7 +186,10 @@ export default defineConfig(({ mode }) => {
         },
       },
     ],
-    server: { port: 3000 },
+    server: {
+      port: 3000,
+      allowedHosts: true, // allow ngrok and other tunnel hosts in dev
+    },
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

@@ -19,8 +19,11 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
+  signInWithGoogle: () => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
+  authError: string | null
+  clearAuthError: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -39,10 +42,15 @@ async function fetchProfile(userId: string): Promise<Profile | null> {
   return { id: data.id, role: data.role as "user" | "admin" }
 }
 
+const NOT_ADMIN_MESSAGE = "You don't have access to the admin dashboard."
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [authError, setAuthError] = useState<string | null>(null)
+
+  const clearAuthError = useCallback(() => setAuthError(null), [])
 
   const refreshProfile = useCallback(async () => {
     const { data: { session: s } } = await supabase.auth.getSession()
@@ -79,6 +87,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const p = await fetchProfile(s.user.id)
             if (!isActive) return
+            if (p?.role !== "admin") {
+              setAuthError(NOT_ADMIN_MESSAGE)
+              setSession(null)
+              setProfile(null)
+              await supabase.auth.signOut()
+              return
+            }
             setProfile(p)
           } catch (profileError) {
             console.error("[Auth] profile load failed:", profileError)
@@ -117,7 +132,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           fetchProfile(userId)
             .then((p) => {
               if (!isActive) return
-              setProfile(p)
+              if (p?.role !== "admin") {
+                setAuthError(NOT_ADMIN_MESSAGE)
+                setSession(null)
+                setProfile(null)
+                void supabase.auth.signOut()
+              } else {
+                setProfile(p)
+              }
             })
             .catch((profileError) => {
               console.error("[Auth] auth state profile load failed:", profileError)
@@ -144,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (email: string, password: string): Promise<{ error: string | null }> => {
+      setAuthError(null)
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
@@ -154,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const p = await fetchProfile(data.user.id)
         if (p?.role !== "admin") {
           await supabase.auth.signOut()
-          return { error: "You don't have access to the admin dashboard." }
+          return { error: NOT_ADMIN_MESSAGE }
         }
         setSession(data.session)
         setProfile(p)
@@ -171,6 +194,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   )
 
+  const signInWithGoogle = useCallback(async (): Promise<{ error: string | null }> => {
+    setAuthError(null)
+    try {
+      // redirectTo uses current origin so it works with ngrok/tunnels; add tunnel URL in Supabase Dashboard → Auth → URL Configuration → Redirect URLs
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin },
+      })
+      if (error) return { error: error.message }
+      return { error: null }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Sign in with Google failed"
+      console.error("[Auth] signInWithGoogle error:", e)
+      return { error: msg }
+    }
+  }, [])
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
     setSession(null)
@@ -183,8 +223,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     isAdmin: profile?.role === "admin",
     signIn,
+    signInWithGoogle,
     signOut,
     refreshProfile,
+    authError,
+    clearAuthError,
   }
 
   return (

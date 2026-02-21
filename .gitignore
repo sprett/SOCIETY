@@ -13,6 +13,9 @@ xcuserdata/
 .home/
 .tmp/
 
+## SQL (local scripts / migrations)
+*.sql
+
 ## Secrets (never commit)
 .env
 .env.*
