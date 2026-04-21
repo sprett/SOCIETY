@@ -22,9 +22,6 @@ struct SOCIETYApp: App {
         .system.rawValue
 
     init() {
-        // Don't replace the global URLCache - let Supabase use its own caching
-        // We'll use a separate URLSession for image loading only
-
         // Clean up old cached images on launch
         Task {
             await DiskCacheManager.shared.cleanupIfNeeded()
@@ -152,7 +149,6 @@ struct SOCIETYApp: App {
                     }
                 }
                 .onOpenURL { url in
-                    guard url.scheme == "dinoh.society" else { return }
                     Task {
                         try? await authSession.sessionFromRedirectURL(url)
                     }
@@ -212,9 +208,7 @@ struct SOCIETYApp: App {
                         launchManager.retry()
                     }
                 },
-                onContactSupport: {
-                    // Stub action for now.
-                }
+                onContactSupport: {}
             )
 
         case .error(let message):
@@ -261,7 +255,7 @@ struct SOCIETYApp: App {
         cancelHeartbeat()
         heartbeatTask = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 3 * 60 * 1_000_000_000) // 3 min
+                try? await Task.sleep(nanoseconds: 3 * 60 * 1_000_000_000)
                 guard !Task.isCancelled else { break }
                 await dependencies.appActivityService.reportActivity()
                 await launchManager.validateAccountStatus()

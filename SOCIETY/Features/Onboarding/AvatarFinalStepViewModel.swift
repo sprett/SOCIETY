@@ -16,7 +16,7 @@ final class AvatarFinalStepViewModel: ObservableObject {
     @Published var isRandomizing: Bool = false
     @Published var selectedUIImage: UIImage?
     @Published var dicebearSeed: String
-    @Published var dicebearImageData: Data?
+    @Published private(set) var dicebearImage: UIImage?
     @Published var dicebearURL: URL?
     @Published var isUploading: Bool = false
     @Published var error: String?
@@ -26,6 +26,7 @@ final class AvatarFinalStepViewModel: ObservableObject {
     private let avatarService: any AvatarService
     private let existingImageURL: String?
     private var selectedPhotoData: Data?
+    private var dicebearImageData: Data?
 
     init(userId: UUID, avatarService: any AvatarService, existingImageURL: String? = nil) {
         self.userId = userId
@@ -39,15 +40,11 @@ final class AvatarFinalStepViewModel: ObservableObject {
     }
 
     var hasValidAvatar: Bool {
-        selectedUIImage != nil || dicebearImageData != nil
+        selectedUIImage != nil || dicebearImage != nil
     }
 
     var displayImage: UIImage? {
-        if let selectedUIImage {
-            return selectedUIImage
-        }
-        guard let dicebearImageData else { return nil }
-        return UIImage(data: dicebearImageData)
+        selectedUIImage ?? dicebearImage
     }
 
     func loadInitialAvatar() async {
@@ -79,6 +76,7 @@ final class AvatarFinalStepViewModel: ObservableObject {
         do {
             let data = try await avatarService.downloadDiceBearPNG(seed: dicebearSeed)
             dicebearImageData = data
+            dicebearImage = UIImage(data: data)
             dicebearURL = avatarService.buildDiceBearURL(seed: dicebearSeed)
         } catch {
             generationError = error.localizedDescription
@@ -94,11 +92,11 @@ final class AvatarFinalStepViewModel: ObservableObject {
         let newSeed = UUID().uuidString
         do {
             let data = try await avatarService.downloadDiceBearPNG(seed: newSeed)
-            // Randomize should switch source back to DiceBear.
             selectedUIImage = nil
             selectedPhotoData = nil
             dicebearSeed = newSeed
             dicebearImageData = data
+            dicebearImage = UIImage(data: data)
             dicebearURL = avatarService.buildDiceBearURL(seed: newSeed)
             generationError = nil
         } catch {
@@ -159,11 +157,11 @@ final class AvatarFinalStepViewModel: ObservableObject {
             )
         }
 
-        guard let dicebearImageData else {
+        guard let data = dicebearImageData else {
             throw AvatarServiceError.invalidImageData
         }
 
-        let upload = try avatarService.prepareUploadData(from: dicebearImageData)
+        let upload = try avatarService.prepareUploadData(from: data)
         return AvatarSelection(
             source: .dicebear,
             seed: dicebearSeed,

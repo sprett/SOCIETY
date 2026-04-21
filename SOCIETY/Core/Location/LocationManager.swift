@@ -54,6 +54,7 @@ final class LocationManager: NSObject, ObservableObject {
             requestLocationPermission()
             for _ in 0..<30 {
                 try? await Task.sleep(nanoseconds: 100_000_000)
+                if Task.isCancelled { return nil }
                 if authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways {
                     break
                 }
@@ -67,6 +68,7 @@ final class LocationManager: NSObject, ObservableObject {
 
         for _ in 0..<50 {
             try? await Task.sleep(nanoseconds: 100_000_000)
+            if Task.isCancelled { return nil }
             if let coord = userLocation { return coord }
         }
         return nil

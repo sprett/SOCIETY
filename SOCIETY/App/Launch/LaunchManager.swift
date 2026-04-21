@@ -62,10 +62,8 @@ final class LaunchManager: ObservableObject {
                 state = .accountDeleted
                 return
             }
-
-            if (profile.isActive ?? true) == false || profile.deletedAt != nil {
-                state = .accountDisabled(reason: "Your account is disabled.")
-                return
+            if let blocked = blockedState(for: profile) {
+                state = blocked
             }
         } catch {
             if isUnauthorizedError(error) {
@@ -110,18 +108,12 @@ final class LaunchManager: ObservableObject {
             let profile = try await fetchLaunchProfile(userID: userID)
 
             guard let profile else {
-                await finalize(
-                    .accountDeleted,
-                    launchStartedAt: launchStartedAt
-                )
+                await finalize(.accountDeleted, launchStartedAt: launchStartedAt)
                 return
             }
 
-            if (profile.isActive ?? true) == false || profile.deletedAt != nil {
-                await finalize(
-                    .accountDisabled(reason: "Your account is disabled."),
-                    launchStartedAt: launchStartedAt
-                )
+            if let blocked = blockedState(for: profile) {
+                await finalize(blocked, launchStartedAt: launchStartedAt)
                 return
             }
 
@@ -195,18 +187,28 @@ final class LaunchManager: ObservableObject {
             return first
         }
 
-        // Let the background fetch continue if timeout fired.
         if !completedWithinTimeout {
             return
         }
     }
 
+    private func blockedState(for profile: LaunchProfileRow) -> AppLaunchState? {
+        if (profile.isActive ?? true) == false || profile.deletedAt != nil {
+            return .accountDisabled(reason: "Your account is disabled.")
+        }
+        return nil
+    }
+
     private func isUnauthorizedError(_ error: Error) -> Bool {
-        let message = error.localizedDescription.lowercased()
-        return message.contains("unauthorized")
-            || message.contains("jwt")
-            || message.contains("401")
-            || message.contains("auth")
+        if let authError = error as? AuthError {
+            let unauthorized: Set<ErrorCode> = [
+                .badJWT, .invalidJWT, .noAuthorization, .sessionNotFound,
+                .sessionExpired, .refreshTokenNotFound, .refreshTokenAlreadyUsed,
+                .invalidCredentials,
+            ]
+            return unauthorized.contains(authError.errorCode)
+        }
+        return false
     }
 }
 

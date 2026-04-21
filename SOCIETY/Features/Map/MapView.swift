@@ -14,7 +14,7 @@ struct MapView: View {
     @StateObject private var viewModel: MapViewModel
     @EnvironmentObject private var authSession: AuthSessionStore
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedEvent: Event?
+    @State private var eventDetailPath: [Event] = []
     @State private var selectedMarkerID: UUID?
     @State private var position: MapCameraPosition = .region(
         MKCoordinateRegion(
@@ -25,47 +25,51 @@ struct MapView: View {
 
     private let eventRepository: any EventRepository
     private let eventImageUploadService: any EventImageUploadService
+    private let rsvpRepository: any RsvpRepository
     private let onDismiss: (() -> Void)?
 
     init(
         eventRepository: any EventRepository,
         eventImageUploadService: any EventImageUploadService = MockEventImageUploadService(),
+        rsvpRepository: any RsvpRepository = MockRsvpRepository(),
         onDismiss: (() -> Void)? = nil
     ) {
         self.eventRepository = eventRepository
         self.eventImageUploadService = eventImageUploadService
+        self.rsvpRepository = rsvpRepository
         self.onDismiss = onDismiss
         _viewModel = StateObject(wrappedValue: MapViewModel(eventRepository: eventRepository))
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $eventDetailPath) {
             mapContent
+                .navigationDestination(for: Event.self) { event in
+                    EventDetailView(
+                        event: event,
+                        eventRepository: eventRepository,
+                        eventImageUploadService: eventImageUploadService,
+                        rsvpRepository: rsvpRepository,
+                        authSession: authSession,
+                        onDeleted: {
+                            viewModel.refresh()
+                            eventDetailPath = []
+                        },
+                        onCoverChanged: {
+                            Task {
+                                await viewModel.refreshAndUpdateSelected(selectedEventId: event.id)
+                                if let updatedEvent = viewModel.event(by: event.id), !eventDetailPath.isEmpty,
+                                   let idx = eventDetailPath.firstIndex(where: { $0.id == event.id }) {
+                                    eventDetailPath[idx] = updatedEvent
+                                }
+                            }
+                        },
+                        onRsvpChanged: {}
+                    )
+                }
         }
-        .sheet(item: $selectedEvent) { event in
-            EventDetailView(
-                event: event,
-                eventRepository: eventRepository,
-                eventImageUploadService: eventImageUploadService,
-                rsvpRepository: MockRsvpRepository(),
-                authSession: authSession,
-                onDeleted: { viewModel.refresh() },
-                onCoverChanged: {
-                    Task {
-                        await viewModel.refreshAndUpdateSelected(selectedEventId: event.id)
-                        // Update selectedEvent with the refreshed data
-                        if let updatedEvent = viewModel.event(by: event.id) {
-                            selectedEvent = updatedEvent
-                        }
-                    }
-                },
-                onRsvpChanged: {}
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-        }
-        .onChange(of: selectedEvent) { _, newEvent in
-            if newEvent == nil {
+        .onChange(of: eventDetailPath) { _, path in
+            if path.isEmpty {
                 selectedMarkerID = nil
             }
         }
@@ -210,7 +214,7 @@ struct MapView: View {
         else {
             return
         }
-        selectedEvent = event
+        eventDetailPath.append(event)
     }
 
     private func handleLocateMeTap() {

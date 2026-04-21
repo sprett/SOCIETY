@@ -82,7 +82,6 @@ final class EventListViewModel: ObservableObject {
             }
         } catch {
             events = []
-            eventsStore?.replaceCachedEvents([])
         }
     }
 

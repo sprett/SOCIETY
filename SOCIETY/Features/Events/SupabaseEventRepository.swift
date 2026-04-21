@@ -11,6 +11,7 @@ import Supabase
 
 final class SupabaseEventRepository: EventRepository {
     private let client: SupabaseClient
+    private static let iso8601 = ISO8601DateFormatter()
 
     init(client: SupabaseClient) {
         self.client = client
@@ -18,9 +19,9 @@ final class SupabaseEventRepository: EventRepository {
 
     func fetchEvents() async throws -> [Event] {
         let now = Date()
-        let nowString = ISO8601DateFormatter().string(from: now)
+        let nowString = Self.iso8601.string(from: now)
         let startOfToday = Calendar.current.startOfDay(for: now)
-        let startOfTodayString = ISO8601DateFormatter().string(from: startOfToday)
+        let startOfTodayString = Self.iso8601.string(from: startOfToday)
         let rows: [EventDBRow] =
             try await client
             .from("events")

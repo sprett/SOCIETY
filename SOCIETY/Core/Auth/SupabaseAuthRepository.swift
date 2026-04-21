@@ -21,9 +21,6 @@ final class SupabaseAuthRepository: AuthRepository {
     }
 
     func currentUserID() async -> UUID? {
-        // `session` throws if there's no session; treat as signed out.
-        // With emitLocalSessionAsInitialSession: true, also treat expired sessions as signed out
-        // until tokenRefreshed or signOut is received.
         do {
             let session = try await client.auth.session
             if session.isExpired { return nil }
@@ -47,11 +44,9 @@ final class SupabaseAuthRepository: AuthRepository {
         do {
             let session = try await client.auth.session
             if session.isExpired { return nil }
-            // Try to get name from user metadata (stored during Sign in with Apple)
             if case .string(let fullName)? = session.user.userMetadata["full_name"] {
                 return fullName
             }
-            // Fallback to individual name components
             if case .string(let givenName)? = session.user.userMetadata["given_name"],
                 case .string(let familyName)? = session.user.userMetadata["family_name"]
             {
@@ -139,17 +134,27 @@ final class SupabaseAuthRepository: AuthRepository {
         }
     }
 
+    private static let birthdateISO8601: ISO8601DateFormatter = ISO8601DateFormatter()
+    private static let birthdateYMD: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+    private static let birthdateMDY: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MM/dd/yyyy"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
     private func parseBirthdate(from metadata: [String: AnyJSON]) -> Date? {
         let keys = ["birthdate", "birthday", "birth_date"]
         for key in keys {
             guard case .string(let value)? = metadata[key], !value.isEmpty else { continue }
-            if let date = ISO8601DateFormatter().date(from: value) { return date }
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            if let date = formatter.date(from: value) { return date }
-            formatter.dateFormat = "MM/dd/yyyy"
-            if let date = formatter.date(from: value) { return date }
+            if let date = Self.birthdateISO8601.date(from: value) { return date }
+            if let date = Self.birthdateYMD.date(from: value) { return date }
+            if let date = Self.birthdateMDY.date(from: value) { return date }
         }
         return nil
     }
@@ -171,8 +176,6 @@ final class SupabaseAuthRepository: AuthRepository {
                 userInfo: [NSLocalizedDescriptionKey: "Failed to get identity token"])
         }
 
-        // Sign in with Supabase using the Apple ID token
-        // Note: Apple only provides email/name on first sign-in, so we'll update user metadata after sign-in
         _ = try await client.auth.signInWithIdToken(
             credentials: .init(
                 provider: .apple,
@@ -182,8 +185,7 @@ final class SupabaseAuthRepository: AuthRepository {
             )
         )
 
-        // Apple only provides the user's full name during the first sign-in attempt
-        // Save it to user metadata for future use (as recommended by Supabase docs)
+        // Apple only provides fullName on first sign-in — save to metadata for future sessions.
         if let fullName = credential.fullName {
             var metadata: [String: AnyJSON] = [:]
 
@@ -221,14 +223,11 @@ final class SupabaseAuthRepository: AuthRepository {
         _ = try await client.auth.signInWithOAuth(
             provider: .google,
             redirectTo: oAuthRedirectURL
-        ) { (_: ASWebAuthenticationSession) in
-            // Optional: customize ASWebAuthenticationSession (e.g. presentationContextProvider)
-        }
+        ) { (_: ASWebAuthenticationSession) in }
     }
 
     func sessionFromRedirectURL(_ url: URL) async throws {
         guard url.scheme == oAuthRedirectScheme else { return }
-        // Supabase returns tokens in the URL fragment: #access_token=...&refresh_token=...
         guard let fragment = url.fragment, !fragment.isEmpty else {
             throw NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Missing fragment in redirect URL"])
         }
@@ -242,12 +241,14 @@ final class SupabaseAuthRepository: AuthRepository {
     }
 
     private func parseFragment(_ fragment: String) -> [String: String] {
-        fragment.split(separator: "&").reduce(into: [String: String]()) { result, pair in
-            let parts = pair.split(separator: "=", maxSplits: 1)
-            if parts.count == 2 {
-                result[String(parts[0])] = String(parts[1]).removingPercentEncoding ?? String(parts[1])
+        var components = URLComponents()
+        components.query = fragment
+        return Dictionary(
+            uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
+                guard let value = item.value else { return nil }
+                return (item.name, value)
             }
-        }
+        )
     }
 
     func signOut() async throws {

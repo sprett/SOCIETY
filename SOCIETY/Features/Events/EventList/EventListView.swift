@@ -24,7 +24,7 @@ struct EventListView: View {
     @ObservedObject private var locationManager: LocationManager
     @ObservedObject private var eventsStore: EventsStore
 
-    @State private var selectedEvent: Event?
+    @State private var eventDetailPath: [Event] = []
     @State private var isCreatePresented: Bool = false
     @State private var isProfilePresented: Bool = false
 
@@ -67,18 +67,6 @@ struct EventListView: View {
         )
     }
 
-    private var isEventDetailPresented: Bool {
-        selectedEvent != nil
-    }
-
-    private var backgroundBlurRadius: CGFloat {
-        isEventDetailPresented ? 10 : 0
-    }
-
-    private var backgroundDimOpacity: Double {
-        isEventDetailPresented ? 0.12 : 0
-    }
-
     private var showHomeEmptyState: Bool {
         authSession.userID != nil
             && !showEventsLoadingOverlay
@@ -93,7 +81,7 @@ struct EventListView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $eventDetailPath) {
             ZStack(alignment: .top) {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
@@ -167,16 +155,30 @@ struct EventListView: View {
                 }
             }
         }
-        .tint(AppColors.primaryText)
-        .blur(radius: backgroundBlurRadius)
-        .overlay {
-            if isEventDetailPresented {
-                Rectangle()
-                    .fill(Color.black.opacity(backgroundDimOpacity))
-                    .ignoresSafeArea()
-            }
+        .navigationDestination(for: Event.self) { event in
+            EventDetailView(
+                event: event,
+                eventRepository: eventRepository,
+                eventImageUploadService: eventImageUploadService,
+                rsvpRepository: rsvpRepository,
+                authSession: authSession,
+                onDeleted: {
+                    viewModel.refresh()
+                    eventDetailPath = []
+                },
+                onCoverChanged: {
+                    Task {
+                        await viewModel.refreshAndUpdateSelected(selectedEventId: event.id)
+                        if let updatedEvent = viewModel.event(by: event.id), !eventDetailPath.isEmpty,
+                           let idx = eventDetailPath.firstIndex(where: { $0.id == event.id }) {
+                            eventDetailPath[idx] = updatedEvent
+                        }
+                    }
+                },
+                onRsvpChanged: { viewModel.refresh() }
+            )
         }
-        .animation(.easeInOut(duration: 0.18), value: isEventDetailPresented)
+        .tint(AppColors.primaryText)
         .fullScreenCover(isPresented: $isCreatePresented) {
             EventCreateSheetHost(
                 authSession: authSession,
@@ -185,34 +187,12 @@ struct EventListView: View {
                 eventImageUploadService: eventImageUploadService,
                 rsvpRepository: rsvpRepository,
                 onCreated: { createdEvent in
-                    selectedEvent = createdEvent
+                    eventDetailPath = [createdEvent]
                     viewModel.refresh()
                     isCreatePresented = false
                 },
                 onDismiss: { isCreatePresented = false }
             )
-        }
-        .sheet(item: $selectedEvent) { event in
-            EventDetailView(
-                event: event,
-                eventRepository: eventRepository,
-                eventImageUploadService: eventImageUploadService,
-                rsvpRepository: rsvpRepository,
-                authSession: authSession,
-                onDeleted: { viewModel.refresh() },
-                onCoverChanged: {
-                    Task {
-                        await viewModel.refreshAndUpdateSelected(selectedEventId: event.id)
-                        // Update selectedEvent with the refreshed data
-                        if let updatedEvent = viewModel.event(by: event.id) {
-                            selectedEvent = updatedEvent
-                        }
-                    }
-                },
-                onRsvpChanged: { viewModel.refresh() }
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isProfilePresented) {
             SettingsView(
@@ -307,7 +287,7 @@ struct EventListView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 16) {
                         Button {
-                            selectedEvent = event
+                            eventDetailPath.append(event)
                         } label: {
                             FeaturedEventCard(
                                 event: event,
@@ -352,7 +332,7 @@ struct EventListView: View {
                 LazyVStack(spacing: 12) {
                     ForEach(viewModel.events) { event in
                         Button {
-                            selectedEvent = event
+                            eventDetailPath.append(event)
                         } label: {
                             EventRow(
                                 event: event,

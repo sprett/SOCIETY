@@ -10,7 +10,7 @@ import SwiftUI
 struct FeedView: View {
     @StateObject private var viewModel: FeedViewModel
     @EnvironmentObject private var authSession: AuthSessionStore
-    @State private var selectedEvent: Event?
+    @State private var eventDetailPath: [Event] = []
     @State private var isProfilePresented: Bool = false
 
     private let eventRepository: any EventRepository
@@ -20,18 +20,6 @@ struct FeedView: View {
     private let eventImageUploadService: any EventImageUploadService
     private let profileImageUploadService: any ProfileImageUploadService
     private let onDiscoverTapped: (() -> Void)?
-
-    private var isEventDetailPresented: Bool {
-        selectedEvent != nil
-    }
-
-    private var backgroundBlurRadius: CGFloat {
-        isEventDetailPresented ? 10 : 0
-    }
-
-    private var backgroundDimOpacity: Double {
-        isEventDetailPresented ? 0.12 : 0
-    }
 
     init(
         eventRepository: any EventRepository = MockEventRepository(),
@@ -53,7 +41,7 @@ struct FeedView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $eventDetailPath) {
             ZStack(alignment: .top) {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
@@ -68,7 +56,7 @@ struct FeedView: View {
                             LazyVStack(spacing: 12) {
                                 ForEach(viewModel.feedEvents) { event in
                                     Button {
-                                        selectedEvent = event
+                                        eventDetailPath.append(event)
                                     } label: {
                                         EventRow(
                                             event: event,
@@ -98,38 +86,30 @@ struct FeedView: View {
                     .frame(maxWidth: .infinity)
                     .allowsHitTesting(true)
             }
-            .tint(AppColors.primaryText)
-            .blur(radius: backgroundBlurRadius)
-            .overlay {
-                if isEventDetailPresented {
-                    Rectangle()
-                        .fill(Color.black.opacity(backgroundDimOpacity))
-                        .ignoresSafeArea()
-                }
-            }
-            .animation(.easeInOut(duration: 0.18), value: isEventDetailPresented)
-        }
-        .sheet(item: $selectedEvent) { event in
-            EventDetailView(
-                event: event,
-                eventRepository: eventRepository,
-                eventImageUploadService: eventImageUploadService,
-                rsvpRepository: rsvpRepository,
-                authSession: authSession,
-                onDeleted: { Task { await viewModel.refresh() } },
-                onCoverChanged: {
-                    Task {
-                        await viewModel.refreshAndUpdateSelected(selectedEventId: event.id)
-                        // Update selectedEvent with the refreshed data
-                        if let updatedEvent = viewModel.event(by: event.id) {
-                            selectedEvent = updatedEvent
+            .navigationDestination(for: Event.self) { event in
+                EventDetailView(
+                    event: event,
+                    eventRepository: eventRepository,
+                    eventImageUploadService: eventImageUploadService,
+                    rsvpRepository: rsvpRepository,
+                    authSession: authSession,
+                    onDeleted: {
+                        Task { await viewModel.refresh() }
+                        eventDetailPath = []
+                    },
+                    onCoverChanged: {
+                        Task {
+                            await viewModel.refreshAndUpdateSelected(selectedEventId: event.id)
+                            if let updatedEvent = viewModel.event(by: event.id), !eventDetailPath.isEmpty,
+                               let idx = eventDetailPath.firstIndex(where: { $0.id == event.id }) {
+                                eventDetailPath[idx] = updatedEvent
+                            }
                         }
-                    }
-                },
-                onRsvpChanged: {}
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
+                    },
+                    onRsvpChanged: {}
+                )
+            }
+            .tint(AppColors.primaryText)
         }
         .sheet(isPresented: $isProfilePresented) {
             SettingsView(

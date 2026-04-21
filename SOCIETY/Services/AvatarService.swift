@@ -21,7 +21,6 @@ final class SupabaseAvatarService: AvatarService {
     private let imageProcessor: ImageProcessor
 
     private static let bucketName = "profile-images"
-    private static let notionistsStyle = "notionists"
 
     init(client: SupabaseClient, imageProcessor: ImageProcessor = ImageProcessor()) {
         self.client = client

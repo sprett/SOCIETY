@@ -12,7 +12,7 @@ import SwiftUI
 struct DiscoverView: View {
     @StateObject private var viewModel: DiscoverViewModel
     @EnvironmentObject private var authSession: AuthSessionStore
-    @State private var selectedEvent: Event?
+    @State private var eventDetailPath: [Event] = []
     @State private var isProfilePresented: Bool = false
     @State private var isMapPresented: Bool = false
     private let eventRepository: any EventRepository
@@ -23,18 +23,6 @@ struct DiscoverView: View {
     private let profileImageUploadService: any ProfileImageUploadService
     @ObservedObject private var locationManager: LocationManager
     private let onHostEventTapped: (() -> Void)?
-
-    private var isEventDetailPresented: Bool {
-        selectedEvent != nil
-    }
-
-    private var backgroundBlurRadius: CGFloat {
-        isEventDetailPresented ? 10 : 0
-    }
-
-    private var backgroundDimOpacity: Double {
-        isEventDetailPresented ? 0.12 : 0
-    }
 
     private let categoryRepository: any CategoryRepository
 
@@ -64,7 +52,7 @@ struct DiscoverView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $eventDetailPath) {
             ZStack(alignment: .top) {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
@@ -113,38 +101,30 @@ struct DiscoverView: View {
                     .frame(maxWidth: .infinity)
                     .allowsHitTesting(true)
             }
-        }
-        .tint(AppColors.primaryText)
-        .blur(radius: backgroundBlurRadius)
-        .overlay {
-            if isEventDetailPresented {
-                Rectangle()
-                    .fill(Color.black.opacity(backgroundDimOpacity))
-                    .ignoresSafeArea()
-            }
-        }
-        .animation(.easeInOut(duration: 0.18), value: isEventDetailPresented)
-        .sheet(item: $selectedEvent) { event in
-            EventDetailView(
-                event: event,
-                eventRepository: eventRepository,
-                eventImageUploadService: eventImageUploadService,
-                rsvpRepository: rsvpRepository,
-                authSession: authSession,
-                onDeleted: { Task { await viewModel.refresh() } },
-                onCoverChanged: {
-                    Task {
-                        await viewModel.refreshAndUpdateSelected(selectedEventId: event.id)
-                        // Update selectedEvent with the refreshed data
-                        if let updatedEvent = viewModel.event(by: event.id) {
-                            selectedEvent = updatedEvent
+            .navigationDestination(for: Event.self) { event in
+                EventDetailView(
+                    event: event,
+                    eventRepository: eventRepository,
+                    eventImageUploadService: eventImageUploadService,
+                    rsvpRepository: rsvpRepository,
+                    authSession: authSession,
+                    onDeleted: {
+                        Task { await viewModel.refresh() }
+                        eventDetailPath = []
+                    },
+                    onCoverChanged: {
+                        Task {
+                            await viewModel.refreshAndUpdateSelected(selectedEventId: event.id)
+                            if let updatedEvent = viewModel.event(by: event.id), !eventDetailPath.isEmpty,
+                               let idx = eventDetailPath.firstIndex(where: { $0.id == event.id }) {
+                                eventDetailPath[idx] = updatedEvent
+                            }
                         }
-                    }
-                },
-                onRsvpChanged: {}
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
+                    },
+                    onRsvpChanged: {}
+                )
+            }
+            .tint(AppColors.primaryText)
         }
         .sheet(isPresented: $isProfilePresented) {
             SettingsView(
@@ -161,6 +141,7 @@ struct DiscoverView: View {
             MapView(
                 eventRepository: eventRepository,
                 eventImageUploadService: eventImageUploadService,
+                rsvpRepository: rsvpRepository,
                 onDismiss: { isMapPresented = false }
             )
             .environmentObject(authSession)
@@ -257,7 +238,7 @@ struct DiscoverView: View {
                         HStack(spacing: 16) {
                             ForEach(viewModel.featuredEvents) { event in
                                 Button {
-                                    selectedEvent = event
+                                    eventDetailPath.append(event)
                                 } label: {
                                     FeaturedEventCard(
                                         event: event,
@@ -302,7 +283,7 @@ struct DiscoverView: View {
                         // Events for this date
                         ForEach(group.events) { event in
                             Button {
-                                selectedEvent = event
+                                eventDetailPath.append(event)
                             } label: {
                                 EventRow(
                                     event: event,

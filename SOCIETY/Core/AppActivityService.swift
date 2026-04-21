@@ -1,11 +1,3 @@
-//
-//  AppActivityService.swift
-//  SOCIETY
-//
-//  Reports app open and heartbeat to Supabase for admin dashboard (users_online, last_app_open_at).
-//  Uses device location when available, otherwise Edge Function falls back to IP geolocation.
-//
-
 import CoreLocation
 import Foundation
 import Supabase
@@ -19,8 +11,6 @@ final class AppActivityService {
         self.locationManager = locationManager
     }
 
-    /// Call on app launch/foreground and periodically while active. Updates last_app_open_at,
-    /// last_seen_at, last_known_lat/lng (from device or IP), and logs to app_open_events.
     func reportActivity() async {
         do {
             let session = try await client.auth.session

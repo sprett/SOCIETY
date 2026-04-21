@@ -9,21 +9,35 @@ import SwiftUI
 
 struct CreateEventDemoView: View {
     @State private var isCreatePresented = false
-    @State private var createdEvent: Event?
+    @State private var eventDetailPath: [Event] = []
     private let authSession = AuthSessionStore(authRepository: PreviewAuthRepository())
 
     var body: some View {
-        VStack(spacing: 24) {
-            Text("Create Event Demo")
-                .font(.title2.weight(.bold))
-                .foregroundStyle(AppColors.primaryText)
-            Button("Open Create Event") {
-                isCreatePresented = true
+        NavigationStack(path: $eventDetailPath) {
+            VStack(spacing: 24) {
+                Text("Create Event Demo")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(AppColors.primaryText)
+                Button("Open Create Event") {
+                    isCreatePresented = true
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.borderedProminent)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(AppColors.background.ignoresSafeArea())
+            .navigationDestination(for: Event.self) { event in
+                EventDetailView(
+                    event: event,
+                    eventRepository: MockEventRepository(),
+                    eventImageUploadService: MockEventImageUploadService(),
+                    rsvpRepository: MockRsvpRepository(),
+                    authSession: authSession,
+                    onDeleted: { eventDetailPath = [] },
+                    onCoverChanged: {},
+                    onRsvpChanged: {}
+                )
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppColors.background.ignoresSafeArea())
         .fullScreenCover(isPresented: $isCreatePresented) {
             EventCreateSheetHost(
                 authSession: authSession,
@@ -32,25 +46,11 @@ struct CreateEventDemoView: View {
                 eventImageUploadService: MockEventImageUploadService(),
                 rsvpRepository: MockRsvpRepository(),
                 onCreated: { event in
-                    createdEvent = event
+                    eventDetailPath = [event]
                     isCreatePresented = false
                 },
                 onDismiss: { isCreatePresented = false }
             )
-        }
-        .sheet(item: $createdEvent) { event in
-            EventDetailView(
-                event: event,
-                eventRepository: MockEventRepository(),
-                eventImageUploadService: MockEventImageUploadService(),
-                rsvpRepository: MockRsvpRepository(),
-                authSession: authSession,
-                onDeleted: { createdEvent = nil },
-                onCoverChanged: {},
-                onRsvpChanged: {}
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
         }
     }
 }

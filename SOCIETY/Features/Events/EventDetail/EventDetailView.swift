@@ -9,6 +9,7 @@ import Combine
 import MapKit
 import PhotosUI
 import SwiftUI
+import UIKit
 
 struct EventDetailView: View {
     @Environment(\.dismiss) private var dismiss
@@ -39,88 +40,26 @@ struct EventDetailView: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
-                hero
+        ZStack {
+            BlurredCoverBackground(
+                imageNameOrURL: viewModel.event.imageNameOrURL,
+                category: viewModel.event.category
+            )
+            .ignoresSafeArea(edges: .top)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(viewModel.event.title)
-                        .font(.system(size: 32, weight: .bold, design: .default))
-                        .foregroundStyle(AppColors.primaryText)
-                        .multilineTextAlignment(.leading)
-
-                    if let organizer = viewModel.primaryOrganizer {
-                        Button {
-                            viewModel.handleOrganizerTap()
-                        } label: {
-                            HStack(spacing: 8) {
-                                Group {
-                                    if let url = organizer.profileImageURL {
-                                        UserAvatarView(imageURL: url, size: 18)
-                                    } else {
-                                        EventAvatar(
-                                            initials: organizer.initials,
-                                            category: viewModel.event.category
-                                        )
-                                        .frame(width: 18, height: 18)
-                                    }
-                                }
-
-                                Text(organizer.name)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(AppColors.secondaryText)
-
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(AppColors.tertiaryText)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    Text(viewModel.dateText)
-                        .font(.subheadline)
-                        .foregroundStyle(AppColors.tertiaryText)
-                }
-
-                if let about = viewModel.event.about {
-                    EventDetailSection {
-                        EventAboutSection(about: about)
-                    }
-                }
-
-                if !viewModel.attendees.isEmpty || viewModel.event.goingCount != nil {
-                    EventDetailSection {
-                        EventAttendingSection(
-                            attendees: viewModel.attendees,
-                            goingCount: viewModel.attendees.isEmpty
-                                ? viewModel.event.goingCount : nil,
-                            onTap: {
-                                viewModel.showAttendeeList = true
-                            }
-                        )
-                    }
-                }
-
-                if viewModel.event.addressLine != nil || viewModel.event.coordinate != nil {
-                    EventDetailSection {
-                        EventLocationSection(event: viewModel.event)
-                    }
-                }
-
-                if let hosts = viewModel.event.hosts, !hosts.isEmpty {
-                    EventDetailSection {
-                        EventHostsSection(hosts: hosts, category: viewModel.event.category)
-                    }
-                }
+            ScrollView(showsIndicators: false) {
+                scrollContent
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 24)
-            .padding(.bottom, 24)
         }
-        .background(AppColors.background.ignoresSafeArea())
-        .safeAreaInset(edge: .bottom) {
-            actionBar
+        .safeAreaInset(edge: .top, alignment: .center, spacing: 0) {
+            topSafeAreaBar
+        }
+        .safeAreaInset(edge: .bottom, alignment: .center, spacing: 0) {
+            Color.clear.frame(height: Self.bottomBlurHeight + 34)
+        }
+        .overlay(alignment: .bottom) {
+            bottomSafeAreaBar
+                .ignoresSafeArea(edges: .bottom)
         }
         .confirmationDialog(
             "More", isPresented: $viewModel.showMoreActions, titleVisibility: .visible
@@ -135,6 +74,17 @@ struct EventDetailView: View {
             }
             Button("Report event", role: .destructive) { viewModel.handleReportTap() }
             Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog(
+            "View location", isPresented: $viewModel.showMapActions, titleVisibility: .visible
+        ) {
+            Button("Open in Apple Maps") { viewModel.openInAppleMaps() }
+            if viewModel.canOpenGoogleMaps {
+                Button("Open in Google Maps") { viewModel.openInGoogleMaps() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Choose an app to view the event location.")
         }
         .sheet(isPresented: $viewModel.showChangeCoverSheet) {
             changeCoverSheet
@@ -160,129 +110,214 @@ struct EventDetailView: View {
                 await viewModel.checkIsAttending()
             }
         }
+        .navigationBarHidden(true)
+        .toolbar(.hidden, for: .tabBar)
     }
 
     private var hero: some View {
         GeometryReader { geometry in
-            let squareSize = geometry.size.width
+            let width = geometry.size.width
+            let height = width * 3 / 4  // 4:3
 
             EventHeroImage(
                 imageNameOrURL: viewModel.event.imageNameOrURL, category: viewModel.event.category
             )
-            .frame(width: squareSize, height: squareSize)
+            .aspectRatio(4 / 3, contentMode: .fill)
+            .frame(width: width, height: height)
+            .clipped()
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
             }
-            .overlay(alignment: .topTrailing) {
-                EventDetailFloatingButton(systemImageName: "square.and.arrow.up") {
-                    viewModel.handleShareTap()
-                }
-                .padding(14)
-            }
-            .overlay(alignment: .bottomTrailing) {
-                EventVenueBadge(title: viewModel.event.venueName)
-                    .padding(14)
-            }
+            .shadow(color: .black.opacity(0.35), radius: 16, x: 0, y: 8)
         }
-        .aspectRatio(1, contentMode: .fit)
+        .aspectRatio(4 / 3, contentMode: .fit)
     }
 
-    private var actionBar: some View {
-        HStack(spacing: 12) {
+    private var topNavOverlay: some View {
+        HStack {
             Button {
-                Task {
-                    if viewModel.isAttending {
-                        await viewModel.handleUnregisterTap()
-                    } else {
-                        await viewModel.handleRegisterTap()
-                    }
-                }
+                dismiss()
             } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: viewModel.isAttending ? "xmark" : "plus")
-                        .font(.subheadline.weight(.semibold))
-                    Text(viewModel.isAttending ? "Unregister" : "Register")
-                        .font(.subheadline.weight(.semibold))
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
+                Image(systemName: "chevron.left")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(navButtonBackground)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(viewModel.isAttending ? AppColors.primaryText : .black)
-            .background {
-                if viewModel.isAttending {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                } else {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.white)
-                }
-            }
-            .overlay {
-                if viewModel.isAttending {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
-                }
-            }
+            .accessibilityLabel("Back")
 
-            Button {
-                viewModel.handleContactTap()
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "envelope")
-                        .font(.subheadline.weight(.semibold))
-                    Text("Contact")
-                        .font(.subheadline.weight(.semibold))
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(AppColors.primaryText)
-            .background(
-                .ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
-            }
+            Spacer()
 
             Button {
                 viewModel.showMoreActions = true
             } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "ellipsis")
-                        .font(.subheadline.weight(.semibold))
-                    Text("More")
-                        .font(.subheadline.weight(.semibold))
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(navButtonBackground)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(AppColors.primaryText)
-            .background(
-                .ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .accessibilityLabel("More options")
+        }
+        .padding(.horizontal, 16)
+        .safeAreaPadding(.top, 16)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var topSafeAreaBar: some View {
+        ZStack(alignment: .top) {
+            LinearGradient(
+                colors: [Color.black.opacity(0.35), Color.clear],
+                startPoint: .top,
+                endPoint: .bottom
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
+            .frame(height: 88)
+            .frame(maxWidth: .infinity)
+            .allowsHitTesting(false)
+            .ignoresSafeArea(edges: .top)
+            topNavOverlay
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var navButtonBackground: some View {
+        Color.clear
+            .background(.ultraThinMaterial, in: Circle())
+    }
+
+    private var scrollContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            hero
+                .padding(.horizontal, 20)
+
+            HStack(alignment: .top, spacing: 12) {
+                Text(viewModel.event.title)
+                    .font(.system(size: 28, weight: .bold, design: .default))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.leading)
+
+                Spacer(minLength: 8)
+
+                CategoryPill(label: viewModel.event.category, category: viewModel.event.category)
+            }
+            .padding(.horizontal, 20)
+
+            VStack(alignment: .leading, spacing: 12) {
+                EventMetaRow(
+                    icon: "mappin.circle.fill",
+                    text: "\(viewModel.event.venueName), \(viewModel.event.neighborhood)")
+                EventMetaRow(
+                    icon: "calendar", text: "\(viewModel.dateText), \(viewModel.timezoneLabel)")
+                EventMetaRow(icon: "tag.fill", text: viewModel.priceLabel)
+            }
+            .padding(.horizontal, 20)
+
+            if viewModel.attendees.isEmpty == false || (viewModel.event.goingCount ?? 0) > 0 {
+                AttendeesRow(
+                    attendees: viewModel.attendees,
+                    goingCount: viewModel.event.goingCount ?? 0,
+                    onTap: { viewModel.showAttendeeList = true }
+                )
+                .padding(.horizontal, 20)
+            }
+
+            if let about = viewModel.event.about {
+                Text(about)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.9))
+                    .lineSpacing(6)
+                    .padding(.horizontal, 20)
+            }
+
+            if let coordinate = viewModel.event.coordinate {
+                MapPreviewCard(
+                    title: viewModel.event.venueName,
+                    coordinate: coordinate,
+                    onTap: { viewModel.showMapActions = true }
+                )
+                .padding(.horizontal, 20)
+            }
+
+            if let hostName = viewModel.hostName {
+                HStack(spacing: 6) {
+                    Text("Hosted by:")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.7))
+                    Text(hostName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 10)
-        .background(
-            .ultraThinMaterial,
-            in: RoundedRectangle(cornerRadius: 22, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
+        .padding(.bottom, 100)
+    }
+
+    /// Bottom bar: blur behind, button on top. Height includes bottom safe area so blur extends to screen edge.
+    private static let bottomBlurHeight: CGFloat = 88
+
+    private var bottomSafeAreaBar: some View {
+        GeometryReader { geometry in
+            let bottomInset = geometry.safeAreaInsets.bottom
+            ZStack(alignment: .bottom) {
+                bottomBlurFade(height: Self.bottomBlurHeight + bottomInset)
+                stickyRSVPButton
+                    .padding(.bottom, bottomInset)
+            }
+            .frame(height: Self.bottomBlurHeight + bottomInset)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 16)
+        .frame(height: Self.bottomBlurHeight + 34)
+        .ignoresSafeArea(edges: .bottom)
+    }
+
+    /// Blur fading up from the bottom; sits behind the RSVP button and extends to screen edge.
+    private func bottomBlurFade(height: CGFloat) -> some View {
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .frame(height: height)
+            .frame(maxWidth: .infinity)
+            .mask(
+                LinearGradient(
+                    colors: [Color.clear, Color.black],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .allowsHitTesting(false)
+    }
+
+    private var stickyRSVPButton: some View {
+        Button {
+            Task {
+                if viewModel.isAttending {
+                    await viewModel.handleUnregisterTap()
+                } else {
+                    await viewModel.handleRegisterTap()
+                }
+            }
+        } label: {
+            Text(viewModel.isAttending ? "Cancel RSVP" : "RSVP")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(viewModel.isAttending ? .white : .black)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+        }
+        .buttonStyle(.plain)
+        .background(
+            viewModel.isAttending ? Color.white.opacity(0.15) : Color.white,
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .accessibilityLabel("RSVP")
+        .accessibilityHint(
+            "Double tap to \(viewModel.isAttending ? "cancel your RSVP" : "RSVP to this event")"
+        )
+        .padding(.horizontal, 20)
         .padding(.bottom, 10)
     }
 
@@ -331,6 +366,7 @@ final class EventDetailViewModel: ObservableObject {
     @Published var attendees: [Attendee] = []
     @Published var isAttending: Bool = false
     @Published var showAttendeeList: Bool = false
+    @Published var showMapActions: Bool = false
 
     private let eventRepository: any EventRepository
     private let eventImageUploadService: any EventImageUploadService
@@ -399,6 +435,36 @@ final class EventDetailViewModel: ObservableObject {
             return EventDateFormatter.dateTimeRange(start: event.startDate, end: endDate)
         }
         return EventDateFormatter.dateOnly(event.startDate)
+    }
+
+    /// e.g. "February 28, 5:00 PM, Berlin time" — timezone label for display. TODO: use event timezone when added to model.
+    var timezoneLabel: String { "local time" }
+
+    /// e.g. "From $140" or "Free event". TODO: Add price to Event model when supported.
+    var priceLabel: String { "Free event" }
+
+    var hostName: String? { event.hosts?.first?.name }
+
+    var canOpenGoogleMaps: Bool {
+        guard let url = URL(string: "comgooglemaps://") else { return false }
+        return UIApplication.shared.canOpenURL(url)
+    }
+
+    func openInAppleMaps() {
+        guard let coordinate = event.coordinate else { return }
+        let placemark = MKPlacemark(coordinate: coordinate)
+        let item = MKMapItem(placemark: placemark)
+        item.name = event.venueName
+        item.openInMaps(launchOptions: nil)
+    }
+
+    func openInGoogleMaps() {
+        guard let coordinate = event.coordinate else { return }
+        let lat = coordinate.latitude
+        let lon = coordinate.longitude
+        let urlString = "comgooglemaps://?q=\(lat),\(lon)&center=\(lat),\(lon)&zoom=14"
+        guard let url = URL(string: urlString) else { return }
+        UIApplication.shared.open(url)
     }
 
     func fetchAttendees() async {
@@ -854,6 +920,211 @@ struct EventDetailSectionHeader: View {
     }
 }
 
+struct CategoryPill: View {
+    let label: String
+    let category: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: EventCategories.icon(for: category))
+                .font(.subheadline.weight(.medium))
+            Text(label)
+                .font(.subheadline.weight(.medium))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            Color.white.opacity(0.18),
+            in: Capsule(style: .continuous)
+        )
+    }
+}
+
+struct EventMetaRow: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: icon)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.9))
+                .frame(width: 22, alignment: .center)
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.9))
+        }
+    }
+}
+
+struct AttendeesRow: View {
+    let attendees: [Attendee]
+    let goingCount: Int
+    let onTap: () -> Void
+
+    private var displayCount: Int {
+        if !attendees.isEmpty { return attendees.count }
+        return goingCount
+    }
+
+    private var label: String {
+        if attendees.isEmpty {
+            return "\(displayCount)+ going"
+        }
+        let names = attendees.prefix(2).compactMap { $0.name }
+        if names.isEmpty {
+            return "\(displayCount)+ going"
+        }
+        if names.count == 1 {
+            return "\(displayCount)+ (inc. \(names[0]) and other friends)"
+        }
+        return "\(displayCount)+ (inc. \(names[0]), \(names[1]) and other friends)"
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                HStack(spacing: -10) {
+                    ForEach(Array(attendees.prefix(5).enumerated()), id: \.element.id) {
+                        _, attendee in
+                        if let avatarURL = attendee.avatarURL {
+                            UserAvatarView(imageURL: avatarURL, size: 32)
+                                .overlay(Circle().strokeBorder(.white.opacity(0.9), lineWidth: 1.5))
+                        } else {
+                            Circle()
+                                .fill(Color.white.opacity(0.2))
+                                .frame(width: 32, height: 32)
+                                .overlay(
+                                    Text(attendee.name?.prefix(2).uppercased() ?? "?")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.white)
+                                )
+                                .overlay(Circle().strokeBorder(.white.opacity(0.9), lineWidth: 1.5))
+                        }
+                    }
+                    if attendees.isEmpty && displayCount > 0 {
+                        ForEach(0..<min(4, displayCount), id: \.self) { _ in
+                            Circle()
+                                .fill(Color.white.opacity(0.2))
+                                .frame(width: 32, height: 32)
+                                .overlay(
+                                    Image(systemName: "person.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.white.opacity(0.8))
+                                )
+                                .overlay(Circle().strokeBorder(.white.opacity(0.9), lineWidth: 1.5))
+                        }
+                    }
+                }
+                Text(label)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.9))
+                Spacer(minLength: 0)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct MapPreviewCard: View {
+    let title: String
+    let coordinate: CLLocationCoordinate2D
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            ZStack(alignment: .bottom) {
+                let region = MKCoordinateRegion(
+                    center: coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                )
+                let position = MapCameraPosition.region(region)
+
+                Map(position: .constant(position)) {
+                    Marker(title.isEmpty ? "Location" : title, coordinate: coordinate)
+                }
+                .allowsHitTesting(false)
+                .frame(height: 200)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                Text("View location")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.black.opacity(0.5), in: Capsule())
+                    .padding(12)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("View event location on map")
+    }
+}
+
+struct BlurredCoverBackground: View {
+    let imageNameOrURL: String
+    let category: String
+
+    private var resolvedURL: URL? {
+        let trimmed = imageNameOrURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") else { return nil }
+        if let url = URL(string: trimmed) { return url }
+        let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        guard let encoded, !encoded.isEmpty else { return nil }
+        return URL(string: encoded)
+    }
+
+    private var gradientPlaceholder: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        AppColors.color(for: category) ?? AppColors.accent,
+                        (AppColors.color(for: category) ?? AppColors.accent).opacity(0.55),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+    }
+
+    var body: some View {
+        ZStack {
+            Group {
+                if let url = resolvedURL {
+                    CachedAsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        gradientPlaceholder
+                    }
+                } else {
+                    gradientPlaceholder
+                }
+            }
+            .frame(minWidth: 0, minHeight: 0)
+            .blur(radius: 60)
+            .ignoresSafeArea()
+
+            Color.black.opacity(0.45)
+                .ignoresSafeArea()
+
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.3),
+                    Color.clear,
+                    Color.black.opacity(0.5),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        }
+    }
+}
+
 struct EventHeroImage: View {
     let imageNameOrURL: String
     let category: String
@@ -977,8 +1248,8 @@ struct EventAvatar: View {
     }
 }
 
-#Preview {
-    let previewEvent = Event(
+#Preview("Event detail — AI") {
+    let event = Event(
         id: UUID(),
         ownerID: nil,
         title: "Nordic AI Night",
@@ -997,9 +1268,68 @@ struct EventAvatar: View {
         goingCount: 75,
         about: "A relaxed meetup for AI builders in Oslo."
     )
-
     return EventDetailView(
-        event: previewEvent,
+        event: event,
+        eventRepository: MockEventRepository(),
+        eventImageUploadService: MockEventImageUploadService(),
+        rsvpRepository: MockRsvpRepository(),
+        authSession: AuthSessionStore(authRepository: PreviewAuthRepository())
+    )
+}
+
+#Preview("Event detail — Music") {
+    let event = Event(
+        id: UUID(),
+        ownerID: nil,
+        title: "The Weeknd Starboy concert",
+        category: "Music",
+        startDate: Date(timeIntervalSinceNow: 60 * 60 * 24 * 7),
+        venueName: "Olympischer Platz 3",
+        neighborhood: "Berlin",
+        distanceKm: 0,
+        imageNameOrURL:
+            "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?q=80&w=2000&auto=format&fit=crop",
+        isFeatured: true,
+        endDate: nil,
+        addressLine: "Olympischer Platz 3, Berlin",
+        coordinate: CLLocationCoordinate2D(latitude: 52.5200, longitude: 13.4050),
+        hosts: [Host(id: UUID(), name: "Live Nation", avatarPlaceholder: "LN")],
+        goingCount: 750,
+        about:
+            "The tour celebrates The Weeknd's album After Hours, as well as his critically-acclaimed album Dawn FM."
+    )
+    return EventDetailView(
+        event: event,
+        eventRepository: MockEventRepository(),
+        eventImageUploadService: MockEventImageUploadService(),
+        rsvpRepository: MockRsvpRepository(),
+        authSession: AuthSessionStore(authRepository: PreviewAuthRepository())
+    )
+}
+
+#Preview("Event detail — Food") {
+    let event = Event(
+        id: UUID(),
+        ownerID: nil,
+        title: "Sourdough & Stories",
+        category: "Food & Drink",
+        startDate: Date(timeIntervalSinceNow: 60 * 60 * 24 * 2),
+        venueName: "Mathallen",
+        neighborhood: "Grünerløkka",
+        distanceKm: 3.2,
+        imageNameOrURL:
+            "https://images.unsplash.com/photo-1592753054398-9fa298d40e85?q=80&w=1665&auto=format&fit=crop",
+        isFeatured: false,
+        endDate: Date(timeIntervalSinceNow: 60 * 60 * 24 * 2 + 60 * 60 * 2),
+        addressLine: "Vulkan 5, 0178 Oslo, Norway",
+        coordinate: CLLocationCoordinate2D(latitude: 59.9226, longitude: 10.7527),
+        hosts: [Host(id: UUID(), name: "Elin Strand", avatarPlaceholder: "ES")],
+        goingCount: 28,
+        about:
+            "A cozy evening of bread tasting and short stories. Come for the crust, stay for the conversation."
+    )
+    return EventDetailView(
+        event: event,
         eventRepository: MockEventRepository(),
         eventImageUploadService: MockEventImageUploadService(),
         rsvpRepository: MockRsvpRepository(),
