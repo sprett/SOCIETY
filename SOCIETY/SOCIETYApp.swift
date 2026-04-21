@@ -6,7 +6,6 @@
 //
 
 import Supabase
-import SwiftData
 import SwiftUI
 import UIKit
 
@@ -105,19 +104,6 @@ struct SOCIETYApp: App {
         }
     }
 
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
-
     var body: some Scene {
         WindowGroup {
             rootView
@@ -158,7 +144,6 @@ struct SOCIETYApp: App {
                     }
                 }
         }
-        .modelContainer(sharedModelContainer)
     }
 
     @ViewBuilder
@@ -187,10 +172,8 @@ struct SOCIETYApp: App {
             }
 
         case .authenticatedReady:
-            MainTabView(
-                dependencies: dependencies,
-                eventsStore: eventsStore
-            )
+            MainTabView(dependencies: dependencies)
+                .environmentObject(eventsStore)
 
         case .accountDeleted:
             AccountDeletedView(onStartOver: {
@@ -247,7 +230,12 @@ struct SOCIETYApp: App {
 
         switch phase {
         case .active:
-            Task { await dependencies.appActivityService.reportActivity() }
+            Task {
+                // Refresh the access token first so the next API call from a
+                // long-backgrounded session doesn't fail with 401.
+                _ = try? await dependencies.supabase.auth.refreshSession()
+                await dependencies.appActivityService.reportActivity()
+            }
             Task { await launchManager.validateAccountStatus() }
             startHeartbeat()
         case .inactive, .background:

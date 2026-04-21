@@ -185,6 +185,7 @@ struct EventListView: View {
                 eventImageUploadService: eventImageUploadService,
                 rsvpRepository: rsvpRepository,
                 onCreated: { createdEvent in
+                    eventsStore.upsert(createdEvent)
                     selectedEvent = createdEvent
                     viewModel.refresh()
                     isCreatePresented = false
@@ -199,7 +200,10 @@ struct EventListView: View {
                 eventImageUploadService: eventImageUploadService,
                 rsvpRepository: rsvpRepository,
                 authSession: authSession,
-                onDeleted: { viewModel.refresh() },
+                onDeleted: {
+                    if let id = selectedEvent?.id { eventsStore.remove(id: id) }
+                    viewModel.refresh()
+                },
                 onCoverChanged: {
                     Task {
                         await viewModel.refreshAndUpdateSelected(selectedEventId: event.id)
@@ -258,16 +262,6 @@ struct EventListView: View {
         .frame(maxWidth: .infinity)
     }
 
-    @ViewBuilder
-    private var liquidGlassBackground: some View {
-        if #available(iOS 26.0, *) {
-            Color.clear
-                .glassEffect(.regular, in: .circle)
-        } else {
-            Color.clear
-                .background(.ultraThinMaterial, in: Circle())
-        }
-    }
 
     private var header: some View {
         HStack(spacing: 12) {
@@ -291,7 +285,7 @@ struct EventListView: View {
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(AppColors.primaryText)
                     .frame(width: 40, height: 40)
-                    .background(liquidGlassBackground)
+                    .liquidGlassCircle()
                     .clipShape(Circle())
             }
         }

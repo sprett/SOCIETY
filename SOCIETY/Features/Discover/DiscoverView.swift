@@ -7,6 +7,7 @@
 
 import Combine
 import CoreLocation
+import os
 import SwiftUI
 
 struct DiscoverView: View {
@@ -157,25 +158,18 @@ struct DiscoverView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
+        .errorToast(message: Binding(
+            get: { viewModel.errorMessage },
+            set: { viewModel.errorMessage = $0 }
+        ))
         .fullScreenCover(isPresented: $isMapPresented) {
             MapView(
                 eventRepository: eventRepository,
                 eventImageUploadService: eventImageUploadService,
+                rsvpRepository: rsvpRepository,
                 onDismiss: { isMapPresented = false }
             )
             .environmentObject(authSession)
-        }
-    }
-
-    @ViewBuilder
-    private var liquidGlassBackground: some View {
-        if #available(iOS 26.0, *) {
-            Color.clear
-                .glassEffect(.regular, in: .circle)
-        } else {
-            // Fallback for iOS < 26 - use ultraThinMaterial for liquid glass effect
-            Color.clear
-                .background(.ultraThinMaterial, in: Circle())
         }
     }
 
@@ -194,26 +188,30 @@ struct DiscoverView: View {
 
             Spacer()
 
-            Button {
-                isMapPresented = true
-            } label: {
-                Image(systemName: "map")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(AppColors.primaryText)
-                    .frame(width: 40, height: 40)
-                    .background(liquidGlassBackground)
-                    .clipShape(Circle())
-            }
+            GlassCluster(spacing: 8) {
+                HStack(spacing: 8) {
+                    Button {
+                        isMapPresented = true
+                    } label: {
+                        Image(systemName: "map")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(AppColors.primaryText)
+                            .frame(width: 40, height: 40)
+                            .liquidGlassCircle()
+                            .clipShape(Circle())
+                    }
 
-            Button {
-                viewModel.handleSearchTap()
-            } label: {
-                Image(systemName: "magnifyingglass")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(AppColors.primaryText)
-                    .frame(width: 40, height: 40)
-                    .background(liquidGlassBackground)
-                    .clipShape(Circle())
+                    Button {
+                        viewModel.handleSearchTap()
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(AppColors.primaryText)
+                            .frame(width: 40, height: 40)
+                            .liquidGlassCircle()
+                            .clipShape(Circle())
+                    }
+                }
             }
         }
     }
@@ -364,6 +362,7 @@ final class DiscoverViewModel: ObservableObject {
     @Published private(set) var events: [Event] = []
     @Published var selectedCategory: String = "All"
     @Published private(set) var dbCategories: [EventCategory] = []
+    @Published var errorMessage: String?
 
     private let repository: any EventRepository
     private let categoryRepository: any CategoryRepository
@@ -377,13 +376,7 @@ final class DiscoverViewModel: ObservableObject {
 
     /// Distance in km from the user's current location to the event. Nil if user location or event coordinate is unavailable.
     func distanceFromUser(for event: Event) -> Double? {
-        guard let userCoord = locationManager.userLocation,
-            let eventCoord = event.coordinate
-        else { return nil }
-        let userLocation = CLLocation(latitude: userCoord.latitude, longitude: userCoord.longitude)
-        let eventLocation = CLLocation(
-            latitude: eventCoord.latitude, longitude: eventCoord.longitude)
-        return eventLocation.distance(from: userLocation) / 1000
+        EventDistance.kilometers(from: event, user: locationManager.userLocation)
     }
 
     /// All categories from the DB (or static fallback). "All" plus every category.
@@ -458,7 +451,7 @@ final class DiscoverViewModel: ObservableObject {
     }
 
     func handleSearchTap() {
-        print("Discover search tapped")
+        // Search UI not implemented yet.
     }
 
     private var filteredEvents: [Event] {
@@ -470,8 +463,9 @@ final class DiscoverViewModel: ObservableObject {
         do {
             events = try await repository.fetchEvents()
         } catch {
-            // TODO: surface error in UI when we add a shared error component
+            Log.event.error("Discover loadEvents failed: \(error.localizedDescription, privacy: .public)")
             events = []
+            errorMessage = "Couldn't load events. Pull to refresh."
         }
     }
 
@@ -492,6 +486,7 @@ final class DiscoverViewModel: ObservableObject {
         do {
             dbCategories = try await categoryRepository.fetchCategories()
         } catch {
+            Log.event.error("Discover loadCategories failed: \(error.localizedDescription, privacy: .public)")
             // Keep static fallback
         }
     }

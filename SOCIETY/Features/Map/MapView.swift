@@ -25,15 +25,18 @@ struct MapView: View {
 
     private let eventRepository: any EventRepository
     private let eventImageUploadService: any EventImageUploadService
+    private let rsvpRepository: any RsvpRepository
     private let onDismiss: (() -> Void)?
 
     init(
         eventRepository: any EventRepository,
         eventImageUploadService: any EventImageUploadService = MockEventImageUploadService(),
+        rsvpRepository: any RsvpRepository = MockRsvpRepository(),
         onDismiss: (() -> Void)? = nil
     ) {
         self.eventRepository = eventRepository
         self.eventImageUploadService = eventImageUploadService
+        self.rsvpRepository = rsvpRepository
         self.onDismiss = onDismiss
         _viewModel = StateObject(wrappedValue: MapViewModel(eventRepository: eventRepository))
     }
@@ -47,7 +50,7 @@ struct MapView: View {
                 event: event,
                 eventRepository: eventRepository,
                 eventImageUploadService: eventImageUploadService,
-                rsvpRepository: MockRsvpRepository(),
+                rsvpRepository: rsvpRepository,
                 authSession: authSession,
                 onDeleted: { viewModel.refresh() },
                 onCoverChanged: {
@@ -83,42 +86,44 @@ struct MapView: View {
 
     private var mapOverlayButtons: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    if let onDismiss {
-                        onDismiss()
-                    } else {
-                        dismiss()
+            GlassCluster {
+                HStack {
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        if let onDismiss {
+                            onDismiss()
+                        } else {
+                            dismiss()
+                        }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(AppColors.primaryText)
+                            .frame(width: 44, height: 44)
+                            .liquidGlassCircle()
+                            .clipShape(Circle())
                     }
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(AppColors.primaryText)
-                        .frame(width: 44, height: 44)
-                        .background(liquidGlassBackground)
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
+                    .buttonStyle(.plain)
 
-                Spacer()
+                    Spacer()
 
-                Button(action: handleLocateMeTap) {
-                    Image(systemName: "location.fill")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(AppColors.primaryText)
-                        .frame(width: 44, height: 44)
-                        .background(liquidGlassBackground)
-                        .clipShape(Circle())
+                    Button(action: handleLocateMeTap) {
+                        Image(systemName: "location.fill")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(AppColors.primaryText)
+                            .frame(width: 44, height: 44)
+                            .liquidGlassCircle()
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 12)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .allowsHitTesting(true)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 12)
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-            .allowsHitTesting(true)
 
             Spacer()
                 .allowsHitTesting(false)
@@ -127,25 +132,16 @@ struct MapView: View {
         .zIndex(100)
     }
 
-    @ViewBuilder
-    private var liquidGlassBackground: some View {
-        if #available(iOS 26.0, *) {
-            Color.clear
-                .glassEffect(.regular, in: .circle)
-        } else {
-            Color.clear
-                .background(.ultraThinMaterial, in: Circle())
-        }
-    }
-
     private var eventMap: some View {
         Map(position: $position, selection: $selectedMarkerID) {
             // Event annotations with images
             ForEach(viewModel.eventsWithCoordinates) { event in
-                Annotation(event.title, coordinate: event.coordinate!) {
-                    EventMapAnnotation(event: event)
+                if let coordinate = event.coordinate {
+                    Annotation(event.title, coordinate: coordinate) {
+                        EventMapAnnotation(event: event)
+                    }
+                    .tag(event.id)
                 }
-                .tag(event.id)
             }
 
             // User location marker

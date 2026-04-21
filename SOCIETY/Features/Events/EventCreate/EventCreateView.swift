@@ -8,70 +8,17 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-// #region agent log
-private func _dbg(_ msg: String, loc: String, hid: String) {
-    let logPath = "/Users/dinoh/Documents/personal/code/society/SOCIETY/.cursor/debug.log"
-    let ts = Int(Date().timeIntervalSince1970 * 1000)
-    let line =
-        "{\"location\":\"\(loc)\",\"message\":\"\(msg)\",\"timestamp\":\(ts),\"sessionId\":\"debug-session\",\"hypothesisId\":\"\(hid)\"}\n"
-    guard let d = line.data(using: .utf8) else { return }
-    let url = URL(fileURLWithPath: logPath)
-    if !FileManager.default.fileExists(atPath: logPath) {
-        try? FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        FileManager.default.createFile(atPath: logPath, contents: nil, attributes: nil)
-    }
-    if let h = try? FileHandle(forWritingTo: url) {
-        h.seekToEndOfFile()
-        h.write(d)
-        try? h.close()
-    }
-}
-// #endregion
-
 private func _glassCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
     content()
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            .ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
+        .liquidGlassCard(cornerRadius: 16)
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)
         }
 }
 
-/// Wheel date/time picker with time restricted to 15-minute intervals (date unchanged).
-private struct MinuteIntervalDatePicker: UIViewRepresentable {
-    @Binding var date: Date
-    var minuteInterval: Int = 15
-
-    func makeUIView(context: Context) -> UIDatePicker {
-        let picker = UIDatePicker()
-        picker.datePickerMode = .dateAndTime
-        picker.minuteInterval = minuteInterval
-        picker.preferredDatePickerStyle = .wheels
-        picker.addTarget(
-            context.coordinator, action: #selector(Coordinator.valueChanged), for: .valueChanged)
-        return picker
-    }
-
-    func updateUIView(_ picker: UIDatePicker, context: Context) {
-        picker.date = date
-        picker.minuteInterval = minuteInterval
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(date: $date)
-    }
-
-    class Coordinator: NSObject {
-        var date: Binding<Date>
-        init(date: Binding<Date>) { self.date = date }
-        @objc func valueChanged(_ sender: UIDatePicker) { date.wrappedValue = sender.date }
-    }
-}
 
 private struct CreateEventFormFieldsView: View {
     @ObservedObject var viewModel: CreateEventViewModel
@@ -219,7 +166,7 @@ private struct CreateEventFormFieldsView: View {
                 .buttonStyle(.plain)
             }
             .sheet(isPresented: $viewModel.isShowingCategoryPicker) {
-                CategoryPickerSheet(
+                EventCreateCategoryPickerSheet(
                     categories: viewModel.availableCategories,
                     selectedCategory: $viewModel.selectedCategory
                 )
@@ -236,210 +183,9 @@ private struct CreateEventFormFieldsView: View {
 
 // MARK: - Category Picker Sheet
 
-private struct CategoryPickerSheet: View {
-    let categories: [EventCategory]
-    @Binding var selectedCategory: EventCategory?
-    @Environment(\.dismiss) private var dismiss
+// CategoryPickerSheet moved to EventCreateCategoryPickerSheet.swift (renamed
+// EventCreateCategoryPickerSheet).
 
-    var body: some View {
-        NavigationStack {
-            List(categories) { category in
-                Button {
-                    selectedCategory = category
-                    dismiss()
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: category.iconIdentifier)
-                            .font(.system(size: 18))
-                            .foregroundStyle(category.accentColor)
-                            .frame(width: 28)
-                        Text(category.name)
-                            .font(.system(size: 17))
-                            .foregroundStyle(AppColors.primaryText)
-                        Spacer()
-                        if selectedCategory?.id == category.id {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(category.accentColor)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-            .listStyle(.plain)
-            .navigationTitle("Category")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .font(.system(size: 17, weight: .semibold))
-                }
-            }
-        }
-    }
-}
-
-/// Event Visibility sheet content matching the Luma-style design: icon, title, intro, Public/Private options, Confirm.
-private struct EventVisibilitySheetContent: View {
-    let initialVisibility: EventVisibility
-    let onConfirm: (EventVisibility) -> Void
-    let onDismiss: () -> Void
-
-    @State private var selectedVisibility: EventVisibility
-
-    init(
-        initialVisibility: EventVisibility, onConfirm: @escaping (EventVisibility) -> Void,
-        onDismiss: @escaping () -> Void
-    ) {
-        self.initialVisibility = initialVisibility
-        self.onConfirm = onConfirm
-        self.onDismiss = onDismiss
-        _selectedVisibility = State(initialValue: initialVisibility)
-    }
-
-    var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
-                // Header: icon, title, close
-                HStack(alignment: .top) {
-                    Image(systemName: "globe")
-                        .font(.title2)
-                        .foregroundStyle(AppColors.primaryText)
-                        .frame(width: 44, height: 44)
-                        .background(AppColors.surface, in: Circle())
-                    Spacer()
-                    Button {
-                        onDismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.body.weight(.medium))
-                            .foregroundStyle(AppColors.primaryText)
-                            .frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.plain)
-                    .background(visibilitySheetLiquidGlassCircle)
-                    .clipShape(Circle())
-                }
-
-                Text("Event Visibility")
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(AppColors.primaryText)
-
-                Text(
-                    "Choose how this event shows up within SOCIETY. People with the direct link to the event can always access it."
-                )
-                .font(.subheadline)
-                .foregroundStyle(AppColors.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-
-                // Options
-                VStack(spacing: 0) {
-                    visibilityRow(
-                        title: "Public",
-                        description:
-                            "Shown on SOCIETY events feed. Eligible to be featured.",
-                        isSelected: selectedVisibility == .public
-                    ) {
-                        selectedVisibility = .public
-                    }
-                    Divider()
-                        .background(AppColors.divider)
-                    visibilityRow(
-                        title: "Private",
-                        description:
-                            "Only people invited or with the link can register.",
-                        isSelected: selectedVisibility == .private
-                    ) {
-                        selectedVisibility = .private
-                    }
-                }
-                .background(
-                    AppColors.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                Button {
-                    onConfirm(selectedVisibility)
-                } label: {
-                    Text("Confirm")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(AppColors.background)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                }
-                .background(
-                    AppColors.primaryText,
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                )
-                .buttonStyle(.plain)
-            }
-            .padding(20)
-            .padding(.bottom, 24)
-        }
-        .scrollBounceBehavior(.basedOnSize)
-        .background(visibilitySheetLiquidGlassBackground)
-        .ignoresSafeArea(edges: .all)
-    }
-
-    @ViewBuilder
-    private var visibilitySheetLiquidGlassCircle: some View {
-        if #available(iOS 26.0, *) {
-            Color.clear.glassEffect(.regular, in: .circle)
-        } else {
-            Color.clear.background(.ultraThinMaterial, in: Circle())
-        }
-    }
-
-    @ViewBuilder
-    private var visibilitySheetLiquidGlassBackground: some View {
-        if #available(iOS 26.0, *) {
-            Color.clear.glassEffect(
-                .regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        } else {
-            Color.clear.background(
-                .ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        }
-    }
-
-    private func visibilityRow(
-        title: String,
-        description: String,
-        isSelected: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(alignment: .top, spacing: 12) {
-                ZStack {
-                    Circle()
-                        .strokeBorder(AppColors.divider, lineWidth: 2)
-                        .frame(width: 22, height: 22)
-                    if isSelected {
-                        Circle()
-                            .fill(AppColors.primaryText)
-                            .frame(width: 14, height: 14)
-                        Image(systemName: "checkmark")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(AppColors.background)
-                    }
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                        .foregroundStyle(AppColors.primaryText)
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(AppColors.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Spacer(minLength: 0)
-            }
-            .padding(16)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
 
 @MainActor
 struct EventCreateView: View {

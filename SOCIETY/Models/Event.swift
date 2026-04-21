@@ -8,7 +8,7 @@
 import CoreLocation
 import Foundation
 
-struct Host: Identifiable, Hashable {
+struct Host: Identifiable, Hashable, Sendable {
     let id: UUID
     let name: String
     let avatarPlaceholder: String
@@ -23,7 +23,7 @@ struct Host: Identifiable, Hashable {
     }
 }
 
-struct Event: Identifiable, Hashable {
+struct Event: Identifiable, Hashable, Sendable {
     let id: UUID
     /// Supabase auth user ID of the event creator; nil for mock or legacy data.
     let ownerID: UUID?

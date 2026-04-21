@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 actor DiskCacheManager {
     static let shared = DiskCacheManager()
@@ -14,8 +15,7 @@ actor DiskCacheManager {
     private let maxCacheAge: TimeInterval = 7 * 24 * 60 * 60  // 7 days
     
     func cleanupIfNeeded() async {
-        let cacheURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        let imageCacheURL = cacheURL.appendingPathComponent("ImageCache")
+        let imageCacheURL = ImageCacheConfig.imageCacheDirectory()
         
         // Create directory if it doesn't exist
         try? FileManager.default.createDirectory(at: imageCacheURL, withIntermediateDirectories: true)
@@ -42,14 +42,13 @@ actor DiskCacheManager {
             try await enforceMaxDiskSize(in: imageCacheURL)
             
         } catch {
-            print("Cache cleanup failed: \(error)")
+            Log.cache.error("Cache cleanup failed: \(error.localizedDescription, privacy: .public)")
         }
     }
     
     func clearAllImageCache() async {
         // Clear only the ImageCache directory, not all URL cache
-        let cacheURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        let imageCacheURL = cacheURL.appendingPathComponent("ImageCache")
+        let imageCacheURL = ImageCacheConfig.imageCacheDirectory()
         
         do {
             // Remove the entire ImageCache directory
@@ -57,13 +56,12 @@ actor DiskCacheManager {
             // Recreate it
             try FileManager.default.createDirectory(at: imageCacheURL, withIntermediateDirectories: true)
         } catch {
-            print("Failed to clear image cache: \(error)")
+            Log.cache.error("Failed to clear image cache: \(error.localizedDescription, privacy: .public)")
         }
     }
     
     func calculateCacheSize() async -> Int64 {
-        let cacheURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        let imageCacheURL = cacheURL.appendingPathComponent("ImageCache")
+        let imageCacheURL = ImageCacheConfig.imageCacheDirectory()
         
         do {
             let fileURLs = try FileManager.default.contentsOfDirectory(

@@ -10,9 +10,16 @@ enum DiceBearURLBuilder {
     static let apiVersion = "9.x"
     static let notionistsStyle = "notionists"
 
+    private static var cache: [String: URL] = [:]
+
     /// Builds a DiceBear Notionists PNG URL.
     /// - Note: PNG output from DiceBear is rate/size limited, so we request 256 and upscale to 512 for storage.
     static func notionistsPNG(seed: String, size: Int = 256) -> URL {
+        let key = "\(seed)|\(size)"
+        if let cached = cache[key] {
+            return cached
+        }
+
         var components = URLComponents()
         components.scheme = "https"
         components.host = "api.dicebear.com"
@@ -26,6 +33,7 @@ enum DiceBearURLBuilder {
             preconditionFailure("Failed to build DiceBear URL")
         }
 
+        cache[key] = url
         return url
     }
 }

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import os
 import Combine
 
 @MainActor
@@ -56,7 +57,7 @@ final class ImageLoader: ObservableObject {
                 self.image = Image(uiImage: uiImage)
             } catch {
                 // Silent failure - placeholder will be shown
-                print("Failed to load image from \(url): \(error)")
+                Log.image.debug("Failed to load image from \(url, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
     }

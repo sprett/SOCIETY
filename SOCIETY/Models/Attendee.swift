@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct Attendee: Identifiable, Hashable {
+struct Attendee: Identifiable, Hashable, Sendable {
     let id: UUID
     let name: String?
     let avatarURL: String?

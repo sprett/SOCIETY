@@ -6,6 +6,7 @@
 import Combine
 import CoreLocation
 import Foundation
+import os
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -300,7 +301,7 @@ final class CreateEventViewModel: ObservableObject {
                 do {
                     try await rsvpRepository.addRsvp(eventId: event.id, userId: userID)
                 } catch {
-                    print("[CreateEvent] Auto-RSVP failed: \(error)")
+                    Log.event.error("Auto-RSVP failed: \(error.localizedDescription, privacy: .public)")
                 }
             }
 

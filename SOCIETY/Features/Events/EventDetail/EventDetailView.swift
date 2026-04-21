@@ -7,6 +7,7 @@
 
 import Combine
 import MapKit
+import os
 import PhotosUI
 import SwiftUI
 
@@ -426,7 +427,7 @@ final class EventDetailViewModel: ObservableObject {
                 )
             }
         } catch {
-            print("[EventDetail] Failed to fetch attendees: \(error)")
+            Log.event.error("Failed to fetch attendees: \(error.localizedDescription, privacy: .public)")
             attendees = []
         }
     }
@@ -439,15 +440,13 @@ final class EventDetailViewModel: ObservableObject {
         do {
             isAttending = try await rsvpRepository.isAttending(eventId: event.id, userId: userID)
         } catch {
-            print("[EventDetail] Failed to check attending status: \(error)")
+            Log.event.error("Failed to check attending status: \(error.localizedDescription, privacy: .public)")
             isAttending = false
         }
     }
 
     func handleRegisterTap() async {
         guard let userID = authSession.userID else {
-            // Show sign-in prompt or alert
-            print("[EventDetail] User not signed in")
             return
         }
 
@@ -457,7 +456,7 @@ final class EventDetailViewModel: ObservableObject {
             await fetchAttendees()
             onRsvpChanged()
         } catch {
-            print("[EventDetail] Failed to add RSVP: \(error)")
+            Log.event.error("Failed to add RSVP: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -472,33 +471,21 @@ final class EventDetailViewModel: ObservableObject {
             await fetchAttendees()
             onRsvpChanged()
         } catch {
-            print("[EventDetail] Failed to remove RSVP: \(error)")
+            Log.event.error("Failed to remove RSVP: \(error.localizedDescription, privacy: .public)")
         }
     }
 
-    func handleContactTap() {
-        print("Contact tapped")
-    }
+    func handleContactTap() {}
 
-    func handleInterestedToggle() {
-        print("Interested toggled: \(isInterested)")
-    }
+    func handleInterestedToggle() {}
 
-    func handleShareTap() {
-        print("Share tapped")
-    }
+    func handleShareTap() {}
 
-    func handleCopyLinkTap() {
-        print("Copy link tapped")
-    }
+    func handleCopyLinkTap() {}
 
-    func handleReportTap() {
-        print("Report tapped")
-    }
+    func handleReportTap() {}
 
-    func handleOrganizerTap() {
-        print("Organizer tapped")
-    }
+    func handleOrganizerTap() {}
 
     func handleDeleteTap() async {
         do {
@@ -563,7 +550,7 @@ final class EventDetailViewModel: ObservableObject {
             showChangeCoverSheet = false
             changeCoverItem = nil
         } catch {
-            print("[EventDetail] Change cover failed: \(error)")
+            Log.event.error("Change cover failed: \(error.localizedDescription, privacy: .public)")
             changeCoverItem = nil
         }
     }

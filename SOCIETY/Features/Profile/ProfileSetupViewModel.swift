@@ -6,6 +6,7 @@
 //
 
 import Combine
+import os
 import SwiftUI
 import UserNotifications
 
@@ -216,7 +217,7 @@ final class ProfileSetupViewModel: ObservableObject {
             selectedInterestIds = try await interestsTask
         } catch {
             // Non-fatal – user can still proceed; categories might be empty but screen will show loader
-            print("[ProfileSetup] Failed to load categories: \(error)")
+            Log.ui.error("ProfileSetup failed to load categories: \(error.localizedDescription, privacy: .public)")
         }
         isLoadingCategories = false
 

@@ -12,10 +12,7 @@ extension View {
     fileprivate func glassCardStyle() -> some View {
         padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                .ultraThinMaterial,
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-            )
+            .liquidGlassCard(cornerRadius: 16)
             .overlay {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(AppColors.divider.opacity(0.7), lineWidth: 1)

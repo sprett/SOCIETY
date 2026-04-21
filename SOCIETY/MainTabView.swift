@@ -11,14 +11,10 @@ struct MainTabView: View {
     @State private var selectedTab = 1  // Home — first screen after onboarding
     @State private var requestCreate = false
     private let dependencies: AppDependencies
-    @ObservedObject private var eventsStore: EventsStore
+    @EnvironmentObject private var eventsStore: EventsStore
 
-    init(
-        dependencies: AppDependencies = .preview(),
-        eventsStore: EventsStore
-    ) {
+    init(dependencies: AppDependencies = .preview()) {
         self.dependencies = dependencies
-        _eventsStore = ObservedObject(wrappedValue: eventsStore)
     }
 
     var body: some View {
@@ -89,6 +85,7 @@ struct MainTabView: View {
 }
 
 #Preview {
-    MainTabView(dependencies: .preview(), eventsStore: EventsStore())
+    MainTabView(dependencies: .preview())
+        .environmentObject(EventsStore())
         .environmentObject(AuthSessionStore(authRepository: PreviewAuthRepository()))
 }

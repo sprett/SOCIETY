@@ -15,6 +15,28 @@ final class EventsStore: ObservableObject {
         loadError = nil
     }
 
+    /// Marks the cache as needing a refresh on the next visible screen without
+    /// blanking the UI. Views that read from the store should also call refresh
+    /// after this on next appear.
+    func invalidate() {
+        didFinishInitialLoad = false
+    }
+
+    /// Inserts or updates a single event in the cached list. Use after create,
+    /// edit, or RSVP changes so list-based screens reflect the change immediately.
+    func upsert(_ event: Event) {
+        if let index = events.firstIndex(where: { $0.id == event.id }) {
+            events[index] = event
+        } else {
+            events.insert(event, at: 0)
+        }
+    }
+
+    /// Drops a single event from the cached list (e.g. after delete).
+    func remove(id: UUID) {
+        events.removeAll { $0.id == id }
+    }
+
     func replaceCachedEvents(_ events: [Event]) {
         self.events = events
         if isLoadingInitialData {

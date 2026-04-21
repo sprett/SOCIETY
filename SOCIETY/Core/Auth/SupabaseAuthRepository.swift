@@ -252,6 +252,7 @@ final class SupabaseAuthRepository: AuthRepository {
 
     func signOut() async throws {
         try await client.auth.signOut()
+        await Self.purgeLocalCaches()
     }
 
     /// Deletes the account via Edge Function (removes profile image, event images, events, RSVPs, then auth user), then signs out locally.
@@ -260,6 +261,15 @@ final class SupabaseAuthRepository: AuthRepository {
         client.functions.setAuth(token: session.accessToken)
         try await client.functions.invoke("delete-account")
         try await client.auth.signOut()
+        await Self.purgeLocalCaches()
+    }
+
+    /// Drops in-memory and on-disk image caches plus URL response cache so a
+    /// subsequent sign-in can't see the previous account's data.
+    private static func purgeLocalCaches() async {
+        await ImageCache.shared.clearAll()
+        await DiskCacheManager.shared.clearAllImageCache()
+        URLCache.shared.removeAllCachedResponses()
     }
 
     func updateUserName(_ name: String) async throws {

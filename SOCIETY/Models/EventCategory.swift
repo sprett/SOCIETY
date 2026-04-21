@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct EventCategory: Identifiable, Equatable, Hashable {
+struct EventCategory: Identifiable, Equatable, Hashable, Sendable {
     let id: UUID
     let name: String
     let iconIdentifier: String

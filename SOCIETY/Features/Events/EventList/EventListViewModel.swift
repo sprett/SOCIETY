@@ -121,12 +121,6 @@ final class EventListViewModel: ObservableObject {
     }
 
     func distanceFromUser(for event: Event) -> Double? {
-        guard let userCoord = locationManager.userLocation,
-            let eventCoord = event.coordinate
-        else { return nil }
-        let userLocation = CLLocation(latitude: userCoord.latitude, longitude: userCoord.longitude)
-        let eventLocation = CLLocation(
-            latitude: eventCoord.latitude, longitude: eventCoord.longitude)
-        return eventLocation.distance(from: userLocation) / 1000
+        EventDistance.kilometers(from: event, user: locationManager.userLocation)
     }
 }
