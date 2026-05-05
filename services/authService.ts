@@ -24,16 +24,38 @@ if (__DEV__) {
 }
 
 export async function createSessionFromUrl(url: string) {
+  if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.log("[auth] OAuth callback URL:", url);
+  }
   const { params, errorCode } = QueryParams.getQueryParams(url);
-  if (errorCode) throw new Error(errorCode);
-  const { access_token, refresh_token } = params;
-  if (!access_token || !refresh_token) return null;
-  const { data, error } = await supabase.auth.setSession({
-    access_token,
-    refresh_token,
-  });
-  if (error) throw error;
-  return data.session;
+  if (errorCode) throw new Error("OAuth error: " + errorCode);
+
+  // PKCE flow (default in @supabase/supabase-js v2.x): callback contains ?code=...
+  // The code_verifier was stashed in AsyncStorage when signInWithOAuth was called.
+  if (params.code) {
+    if (__DEV__) console.log("[auth] Exchanging PKCE code for session");
+    const { data, error } = await supabase.auth.exchangeCodeForSession(params.code);
+    if (error) throw error;
+    return data.session;
+  }
+
+  // Implicit flow: callback contains #access_token=...&refresh_token=...
+  if (params.access_token && params.refresh_token) {
+    if (__DEV__) console.log("[auth] Setting session from implicit-flow tokens");
+    const { data, error } = await supabase.auth.setSession({
+      access_token: params.access_token,
+      refresh_token: params.refresh_token,
+    });
+    if (error) throw error;
+    return data.session;
+  }
+
+  if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.log("[auth] OAuth callback had no code or tokens. params=", params);
+  }
+  return null;
 }
 
 export async function signInWithGoogle() {

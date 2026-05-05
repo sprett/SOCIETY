@@ -1,17 +1,13 @@
 import "../global.css";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import * as Linking from "expo-linking";
 import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
-import { createSessionFromUrl } from "@/services/authService";
 import { fetchProfile } from "@/services/profileService";
 import { useAuthStore } from "@/stores/authStore";
 
 export default function RootLayout() {
-  const url = Linking.useURL();
-
   useEffect(() => {
     const { setSession, setInitializing } = useAuthStore.getState();
     supabase.auth.getSession().then(({ data }) => {
@@ -19,7 +15,8 @@ export default function RootLayout() {
       setInitializing(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (__DEV__) console.log("[auth] onAuthStateChange:", event, !!session);
       setSession(session);
     });
 
@@ -54,13 +51,6 @@ export default function RootLayout() {
       cancelled = true;
     };
   }, [userId]);
-
-  useEffect(() => {
-    if (!url) return;
-    createSessionFromUrl(url).catch((err) => {
-      console.warn("Failed to create session from deep link", err);
-    });
-  }, [url]);
 
   return (
     <SafeAreaProvider>
