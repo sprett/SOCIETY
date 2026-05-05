@@ -1,7 +1,7 @@
 import * as AppleAuthentication from "expo-apple-authentication";
 import { Link } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, Alert, Platform, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Platform, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { signInWithApple, signInWithGoogle } from "@/services/authService";
 
@@ -35,6 +35,11 @@ export default function Welcome() {
   return (
     <SafeAreaView className="flex-1 bg-black">
       <View className="flex-1 items-center justify-center px-8">
+        <Image
+          source={require("../../assets/icon.png")}
+          className="w-28 h-28 rounded-3xl mb-6"
+          resizeMode="cover"
+        />
         <Text className="text-white text-5xl font-bold mb-2">SOCIETY</Text>
         <Text className="text-white/60 text-base mb-16">Discover events near you.</Text>
       </View>
