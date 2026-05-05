@@ -1,4 +1,5 @@
 import * as AppleAuthentication from "expo-apple-authentication";
+import { Link } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Platform, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -60,6 +61,12 @@ export default function Welcome() {
             <Text className="text-black font-semibold text-base">Continue with Google</Text>
           )}
         </Pressable>
+
+        <Link href="/(auth)/login" asChild>
+          <Pressable className="h-[44px] items-center justify-center">
+            <Text className="text-white/70 text-sm">Sign in with email</Text>
+          </Pressable>
+        </Link>
 
         {busy === "apple" && (
           <View className="absolute inset-0 items-center justify-center">
